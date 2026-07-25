@@ -37,6 +37,8 @@ function buildPoolConfig(connectionString: string): PoolConfig {
 
   const config: PoolConfig = {
     connectionString: url.toString(),
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 10_000,
   };
 
   if (useSsl) {

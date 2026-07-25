@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   description: "Contract workflow management",
 };
 
+// Avoid build-time page rendering that hits Clerk/Postgres and can hang Vercel builds.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -10,7 +10,7 @@
     "dev:prod": "npm run build && next start -p 3000",
     "restart": "pkill -f 'next (dev|start)' 2>/dev/null; rm -f .next/dev/lock; npm run dev:prod",
     "postinstall": "prisma generate",
-    "build": "npm run db:generate && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "rm -rf lib/generated/prisma && prisma generate",
