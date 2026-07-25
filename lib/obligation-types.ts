@@ -1,0 +1,88 @@
+export const OBLIGATION_TYPE_VALUES = [
+  "payment",
+  "reporting",
+  "delivery",
+  "compliance",
+  "notice",
+  "confidentiality",
+  "ip_ownership",
+  "indemnification",
+  "insurance",
+  "non_compete",
+  "data_protection",
+  "audit_right",
+  "renewal_notice",
+  "termination_notice",
+  "milestone",
+  "other",
+] as const;
+
+export type ObligationTypeValue = (typeof OBLIGATION_TYPE_VALUES)[number];
+
+export const OBLIGATION_TYPE_LABELS: Record<string, string> = {
+  payment: "Payment",
+  reporting: "Reporting",
+  delivery: "Delivery",
+  compliance: "Compliance",
+  notice: "Notice",
+  confidentiality: "Confidentiality",
+  ip_ownership: "IP Ownership",
+  indemnification: "Indemnification",
+  insurance: "Insurance",
+  non_compete: "Non-Compete",
+  data_protection: "Data Protection",
+  audit_right: "Audit Rights",
+  renewal_notice: "Renewal Notice",
+  termination_notice: "Termination Notice",
+  milestone: "Milestone",
+  other: "Other",
+};
+
+export const OBLIGATION_TYPE_DESCRIPTIONS: Record<string, string> = {
+  payment: "Financial payments owed by the company",
+  reporting: "Reports or disclosures the company must provide",
+  delivery: "Products, services or documents the company must deliver",
+  compliance: "Laws, standards or policies the company must comply with",
+  notice: "Notices the company must give to the counterparty",
+  confidentiality: "Information the company must keep confidential",
+  ip_ownership: "Intellectual property rights and assignments",
+  indemnification: "Indemnification obligations owed by the company",
+  insurance: "Insurance coverage the company must maintain",
+  non_compete: "Activities the company is restricted from",
+  data_protection: "Data handling and privacy obligations",
+  audit_right: "Rights granted to the counterparty to audit the company",
+  renewal_notice: "Notices required to renew or not renew this agreement",
+  termination_notice: "Notices required to terminate this agreement",
+  milestone: "Project milestones or checkpoints the company must hit",
+  other: "Other obligations not covered above",
+};
+
+export const OBLIGATION_TYPE_COLORS: Record<string, string> = {
+  payment: "#059669",
+  reporting: "#2563EB",
+  delivery: "#7C3AED",
+  compliance: "#D97706",
+  notice: "#0891B2",
+  confidentiality: "#BE185D",
+  ip_ownership: "#4F46E5",
+  indemnification: "#DC2626",
+  insurance: "#0D9488",
+  non_compete: "#9333EA",
+  data_protection: "#0369A1",
+  audit_right: "#B45309",
+  renewal_notice: "#15803D",
+  termination_notice: "#B91C1C",
+  milestone: "#3558A0",
+  other: "#6B7280",
+};
+
+export const RESPONSIBLE_PARTIES = [
+  "Finance",
+  "Legal",
+  "Operations",
+  "IT",
+  "HR",
+  "Executive",
+  "All departments",
+  "Unknown",
+] as const;

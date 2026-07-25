@@ -3,24 +3,58 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "predev": "pkill -f 'next (dev|start)' 2>/dev/null || true; lsof -ti :3000 2>/dev/null | xargs kill -9 2>/dev/null || true; rm -f .next/dev/lock",
+    "dev": "WATCHPACK_POLLING=true next dev --webpack -p 3000",
+    "dev:reset": "pkill -f 'next (dev|start)' 2>/dev/null || true; lsof -ti :3000 2>/dev/null | xargs kill -9 2>/dev/null || true; rm -rf .next/dev .next/cache && npm run dev",
+    "dev:clean": "pkill -f 'next (dev|start)' 2>/dev/null || true; lsof -ti :3000 2>/dev/null | xargs kill -9 2>/dev/null || true; rm -rf .next && npm run dev",
+    "dev:prod": "npm run build && next start -p 3000",
+    "restart": "pkill -f 'next (dev|start)' 2>/dev/null; rm -f .next/dev/lock; npm run dev:prod",
+    "postinstall": "prisma generate",
+    "build": "npm run db:generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "rm -rf lib/generated/prisma && prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "seed": "node --import tsx prisma/seed.ts",
+    "storage:ensure-templates-bucket": "npx tsx scripts/ensure-contract-templates-bucket.ts"
+  },
+  "prisma": {
+    "seed": "node --import tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
+    "@clerk/nextjs": "^7.5.7",
+    "@paralleldrive/cuid2": "^3.3.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@sentry/nextjs": "^10.64.0",
+    "@supabase/supabase-js": "^2.110.2",
+    "dotenv": "^17.4.2",
+    "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
     "next": "16.2.9",
+    "openai": "^6.45.0",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "prisma": "^7.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.5",
     "typescript": "^5"
   }
 }

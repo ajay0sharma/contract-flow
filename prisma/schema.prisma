@@ -1,0 +1,487 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ObligationScanStatus {
+  not_scanned
+  scanning
+  completed
+  failed
+}
+
+enum ObligationStatus {
+  active
+  completed
+  waived
+}
+
+enum ObligationType {
+  payment
+  reporting
+  delivery
+  compliance
+  notice
+  confidentiality
+  ip_ownership
+  indemnification
+  insurance
+  non_compete
+  data_protection
+  audit_right
+  renewal_notice
+  termination_notice
+  milestone
+  other
+}
+
+enum RiskScore {
+  not_scored
+  low
+  medium
+  high
+  critical
+}
+
+enum RiskSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum ClauseStatus {
+  approved
+  approved_with_modification
+  non_standard
+  deprecated
+}
+
+enum TemplateVariableFieldType {
+  text
+  date
+  number
+  currency
+  select
+  email
+  yes_no
+}
+
+enum AuditLogEntityType {
+  contract_template
+  contract
+}
+
+enum ContractStage {
+  request
+  legal_review
+  vp_review
+  finance_review
+  executive_signoff
+  awaiting_signature
+  active
+  expired
+  rejected
+}
+
+enum ContractLifecycleStatus {
+  draft
+  pending
+  active
+  expired
+  rejected
+}
+
+enum PoProvider {
+  coupa
+  sap
+  prendio
+  netsuite
+  oracle
+  manual
+  other
+}
+
+enum PoAuthType {
+  api_key
+  oauth2
+  basic_auth
+  none
+}
+
+enum DirectoryProvider {
+  microsoft
+  google
+  manual
+}
+
+enum SyncStatus {
+  never_synced
+  syncing
+  success
+  failed
+}
+
+model Contract {
+  id                          String               @id @default(cuid())
+  organizationId              String
+  recordNumber                String               @unique
+  requesterName               String
+  requesterEmail              String
+  department                  String?
+  contractType                String
+  contractStartDate           String?
+  contractEndDate             String?
+  title                       String
+  description                 String?              @db.Text
+  amount                      String?
+  amountNumeric               Decimal?             @db.Decimal(19, 4)
+  budgeted                    Boolean?
+  poNumber                    String?
+  supplierId                  String               @default("")
+  supplierName                String               @default("")
+  parentAgreementId           String?
+  parentAgreementRecordNumber String               @default("")
+  parentAgreementTitle        String               @default("")
+  confidential                Boolean              @default(false)
+  otherNotes                  String?              @db.Text
+  companyName                 String?
+  address                     String?              @db.Text
+  mainContactName             String?
+  mainContactTitle            String?
+  mainContactEmail            String?
+  mainContactPhone            String?
+  counterpartyId              String?
+  companyProfileId            String?
+  templateId                  String?
+  template                    ContractTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateVersion             Int?
+  stage                       ContractStage        @default(legal_review)
+  currentStepIndex            Int                  @default(0)
+  workflowSteps               Json                 @default("[]")
+  auditTrail                  Json                 @default("[]")
+  attachments                 Json?
+  relatedEmails               Json?
+  intakeFormId                String?
+  generatedDraftPath          String?
+  missingVariables            Json?
+  contractVariables           Json?
+  expiryDate                  DateTime?
+  effectiveDate               DateTime?
+  activatedAt                 DateTime?
+  expiredAt                   DateTime?
+  contractStatus              ContractLifecycleStatus @default(draft)
+  executedDocumentPath        String?
+  executedDocumentName        String?
+  executedDocumentSize        Int?
+  executedUploadedAt          DateTime?
+  executedUploadedById        String?
+  obligationScanStatus        ObligationScanStatus @default(not_scanned)
+  obligationScanCompletedAt   DateTime?
+  obligationScanVersion       Int?
+  obligations                 Json?
+  obligationSummary           String?              @db.Text
+  riskScore                   RiskScore            @default(not_scored)
+  riskScoreCompletedAt        DateTime?
+  riskScoreSummary            String?              @db.Text
+  obligationRecords           Obligation[]
+  riskFactors                 RiskFactor[]
+  clauseUsages                ClauseUsage[]
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+
+  @@index([organizationId])
+  @@index([companyProfileId])
+  @@index([templateId])
+  @@index([stage])
+  @@index([contractStatus])
+  @@index([activatedAt])
+  @@index([expiryDate])
+  @@index([requesterEmail])
+  @@index([contractType])
+}
+
+model Obligation {
+  id               String           @id @default(cuid())
+  contractId       String
+  contract         Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  organizationId   String
+  description      String           @db.Text
+  obligationType   ObligationType
+  dueDate          DateTime?
+  isRecurring      Boolean          @default(false)
+  frequency        String?
+  noticePeriodDays Int?
+  actionDeadline   DateTime?
+  responsibleParty String?
+  status           ObligationStatus @default(active)
+  counterpartyName String?
+  contractTitle    String?
+  recordNumber     String?
+  sourceClause     String?          @db.Text
+  confidenceScore  String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([contractId])
+  @@index([obligationType])
+  @@index([status])
+  @@index([dueDate])
+  @@index([counterpartyName])
+}
+
+model RiskFactor {
+  id              String       @id @default(cuid())
+  contractId      String
+  contract        Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  organizationId  String
+  category        String
+  description     String       @db.Text
+  severity        RiskSeverity
+  clauseReference String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([contractId])
+  @@index([organizationId])
+  @@index([category])
+}
+
+model ClauseLibrary {
+  id              String        @id @default(cuid())
+  organizationId  String
+  title           String
+  category        String
+  contractTypes   Json
+  status          ClauseStatus  @default(approved)
+  preferredText   String        @db.Text
+  alternativeText String?       @db.Text
+  notes           String?       @db.Text
+  createdById     String
+  lastReviewedAt  DateTime?
+  usages          ClauseUsage[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([status])
+}
+
+model ClauseUsage {
+  id             String        @id @default(cuid())
+  clauseId       String
+  clause         ClauseLibrary @relation(fields: [clauseId], references: [id], onDelete: Cascade)
+  contractId     String
+  contract       Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  organizationId String
+  usedText       String        @db.Text
+  isDeviation    Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+
+  @@index([clauseId])
+  @@index([contractId])
+  @@index([organizationId])
+}
+
+model ContractTypeDefinition {
+  id             String   @id @default(cuid())
+  organizationId String
+  slug           String
+  label          String
+  description    String?  @db.Text
+  displayOrder   Int      @default(0)
+  isActive       Boolean  @default(true)
+  showInIntake   Boolean  @default(true)
+  isSystem       Boolean  @default(false)
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, isActive])
+  @@index([organizationId, showInIntake])
+}
+
+model OrganizationBranding {
+  organizationId  String   @id
+  productName     String   @default("ContractFlow")
+  tagline         String?
+  accentColor     String?
+  logoStoragePath String?
+  logoFileName    String?
+  updatedById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ContractTemplate {
+  id                String                    @id @default(cuid())
+  organizationId    String
+  title             String
+  contractType      String
+  description       String?                   @db.Text
+  fileName          String
+  storagePath       String
+  fileSize          Int
+  version           Int                       @default(1)
+  isActive          Boolean                   @default(true)
+  showInIntake      Boolean                   @default(true)
+  isDefault         Boolean                   @default(false)
+  uploadedById      String
+  uploadedAt        DateTime
+  lastUpdatedById   String
+  variables         TemplateVariable[]
+  versions          ContractTemplateVersion[]
+  contracts         Contract[]
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@index([organizationId])
+  @@index([contractType])
+  @@index([isActive])
+  @@index([isDefault])
+}
+
+model ContractTemplateVersion {
+  id           String           @id @default(cuid())
+  templateId   String
+  template     ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version      Int
+  fileName     String
+  storagePath  String
+  fileSize     Int
+  uploadedById String
+  uploadedAt   DateTime
+  changeNote   String?          @db.Text
+
+  @@unique([templateId, version])
+  @@index([templateId])
+}
+
+model TemplateVariable {
+  id            String                    @id @default(cuid())
+  templateId    String
+  template      ContractTemplate          @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name          String
+  label         String
+  fieldType     TemplateVariableFieldType
+  isRequired    Boolean                   @default(true)
+  defaultValue  String?
+  selectOptions Json?
+  helpText      String?                   @db.Text
+  displayOrder  Int
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@unique([templateId, name])
+  @@index([templateId])
+}
+
+model AuditLog {
+  id             String             @id @default(cuid())
+  organizationId String
+  entityType     AuditLogEntityType
+  entityId       String
+  action         String
+  detail         String?            @db.Text
+  actorEmail     String
+  actorName      String?
+  metadata       Json?
+  createdAt      DateTime           @default(now())
+
+  @@index([organizationId])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model PoIntegrationConfig {
+  id                   String     @id @default(cuid())
+  organizationId       String     @unique
+  provider             PoProvider
+  isEnabled            Boolean    @default(false)
+  displayName          String
+  baseUrl              String?
+  authType             PoAuthType
+  encryptedCredentials String?    @db.Text
+  fieldMappings        Json?
+  autoPopulateOnMatch  Boolean    @default(true)
+  requirePoNumber      Boolean    @default(false)
+  allowedContractTypes Json?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  @@index([organizationId])
+}
+
+model PoLookupLog {
+  id              String   @id @default(cuid())
+  organizationId  String
+  contractId      String?
+  poNumber        String
+  provider        String
+  success         Boolean
+  responseData    Json?
+  errorMessage    String?
+  lookedUpByEmail String
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([contractId])
+  @@index([poNumber])
+  @@index([createdAt])
+}
+
+model DirectoryIntegrationConfig {
+  id                    String            @id @default(cuid())
+  organizationId        String            @unique
+  provider              DirectoryProvider
+  isEnabled             Boolean           @default(false)
+  displayName           String
+  lastSyncAt            DateTime?
+  lastSyncStatus        SyncStatus        @default(never_synced)
+  lastSyncCount         Int?
+  lastSyncError         String?           @db.Text
+  autoSyncEnabled       Boolean           @default(true)
+  autoSyncIntervalHours Int               @default(24)
+  encryptedCredentials  String            @db.Text
+  scopeFilter           Json?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([organizationId])
+}
+
+model DirectoryUser {
+  id             String            @id @default(cuid())
+  organizationId String
+  externalId     String
+  email          String
+  displayName    String
+  firstName      String?
+  lastName       String?
+  jobTitle       String?
+  department     String?
+  officeLocation String?
+  phone          String?
+  managerEmail   String?
+  isActive       Boolean           @default(true)
+  provider       DirectoryProvider
+  lastSeenAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([organizationId, externalId])
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([email])
+  @@index([department])
+  @@index([isActive])
+  @@index([displayName])
+}
