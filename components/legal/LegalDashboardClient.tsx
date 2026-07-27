@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalReassignDialog } from "@/components/contracts/ApprovalReassignDialog";
-import { pickupLegalReviewerAction } from "@/app/actions/contracts";
 import { IntakeSettingsClient } from "@/components/legal/IntakeSettingsClient";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
 import { StageBadge } from "@/components/contracts/StageBadge";
@@ -231,19 +230,41 @@ function buildLegalContractsUrl(
   return `/api/legal/contracts?${params.toString()}`;
 }
 
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    throw new Error(
+      response.ok
+        ? "The server returned an empty response. Refresh and try again."
+        : "Request failed. Sign in again and retry.",
+    );
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "Unexpected response from the server. Refresh and try again."
+        : "Request failed. Sign in again and retry.",
+    );
+  }
+}
+
 async function fetchLegalContracts(
   url: string,
 ): Promise<LegalContractsResponse> {
   const response = await fetch(url, { cache: "no-store" });
+  const data = await readJsonResponse<LegalContractsResponse & { error?: string }>(
+    response,
+  );
 
   if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    throw new Error(data?.error ?? "Failed to load contracts");
+    throw new Error(data.error ?? "Failed to load contracts");
   }
 
-  return (await response.json()) as LegalContractsResponse;
+  return data;
 }
 
 export function LegalDashboardClient({
@@ -473,7 +494,15 @@ export function LegalDashboardClient({
     setError(null);
 
     try {
-      await pickupLegalReviewerAction(contractId);
+      const response = await fetch(`/api/contracts/${contractId}/pickup`, {
+        method: "POST",
+      });
+      const data = await readJsonResponse<{ error?: string }>(response);
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to pick up contract.");
+      }
+
       await refreshDashboard(databaseFilters);
     } catch (pickupError) {
       setError(
@@ -524,12 +553,18 @@ export function LegalDashboardClient({
       );
 
       if (!response.ok) {
-        const data = (await response.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(
-          data?.error ?? `Failed to ${approvalModal.action} contract`,
-        );
+        let message = `Failed to ${approvalModal.action} contract`;
+
+        try {
+          const data = await readJsonResponse<{ error?: string }>(response);
+          message = data.error ?? message;
+        } catch (readError) {
+          if (readError instanceof Error && readError.message) {
+            message = readError.message;
+          }
+        }
+
+        throw new Error(message);
       }
 
       closeApprovalModal();
