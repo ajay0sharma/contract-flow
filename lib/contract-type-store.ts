@@ -45,8 +45,8 @@ function mapContractTypeRecord(record: {
     isActive: record.isActive,
     showInIntake: record.showInIntake,
     isSystem: record.isSystem,
-    canBeParentAgreement: record.canBeParentAgreement,
-    requiresParentAgreement: record.requiresParentAgreement,
+    canBeParentAgreement: record.canBeParentAgreement ?? false,
+    requiresParentAgreement: record.requiresParentAgreement ?? false,
     createdById: record.createdById,
     createdAt: toIsoString(record.createdAt),
     updatedAt: toIsoString(record.updatedAt),
@@ -118,10 +118,10 @@ export async function ensureSystemContractTypes(
     return;
   }
 
-  const prisma = getPrismaClient();
   const seeds = buildSystemContractTypeSeed(organizationId);
 
   try {
+    const prisma = getPrismaClient();
     const existingCount = await prisma.contractTypeDefinition.count({
       where: { organizationId },
     });
@@ -132,7 +132,12 @@ export async function ensureSystemContractTypes(
 
     for (const seed of seeds) {
       await prisma.contractTypeDefinition.create({
-        data: seed,
+        data: {
+          ...seed,
+          showInIntake: true,
+          canBeParentAgreement: false,
+          requiresParentAgreement: false,
+        },
       });
     }
   } catch {
@@ -148,9 +153,9 @@ export async function listContractTypes(
     return listMemoryContractTypes(organizationId, options);
   }
 
-  await ensureSystemContractTypes(organizationId);
-
   try {
+    await ensureSystemContractTypes(organizationId);
+
     const prisma = getPrismaClient();
     const records = await prisma.contractTypeDefinition.findMany({
       where: {
@@ -164,7 +169,7 @@ export async function listContractTypes(
       return records.map(mapContractTypeRecord);
     }
   } catch {
-    // Table missing or migration not applied yet.
+    // Table missing, migration not applied yet, or database unavailable.
   }
 
   return listMemoryContractTypes(organizationId, options);

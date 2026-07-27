@@ -9,13 +9,11 @@ import { UserRoleTable } from "@/components/admin/UserRoleTable";
 import { WorkflowConfigForm } from "@/components/admin/WorkflowConfigForm";
 import { WorkflowPolicyForm } from "@/components/admin/WorkflowPolicyForm";
 import {
-  getAdminPolicyAction,
-  listClerkUsersAction,
   requireAdminPage,
 } from "@/app/actions/admin";
 import { adminDashboardSectionHref } from "@/lib/admin-dashboard-sections";
+import { loadAdminDashboardData } from "@/lib/admin-dashboard-data";
 import { getAllContracts } from "@/lib/contract-store";
-import { listContractTypes } from "@/lib/contract-type-store";
 import { getPlatformUsers } from "@/lib/user-store";
 import { getWorkflowConfig } from "@/lib/workflow-store";
 import { isAwaitingApproval } from "@/lib/workflow-engine";
@@ -31,11 +29,8 @@ export default async function AdminDashboardPage() {
   ).length;
   const platformUsers = getPlatformUsers();
   const workflow = getWorkflowConfig();
-  const policy = await getAdminPolicyAction();
-  const users = await listClerkUsersAction();
-  const contractTypes = await listContractTypes("default", {
-    includeInactive: true,
-  });
+  const { policy, contractTypes, users, loadErrors } =
+    await loadAdminDashboardData();
 
   const cards = [
     {
@@ -78,6 +73,13 @@ export default async function AdminDashboardPage() {
       <Suspense fallback={null}>
         <AdminDashboardScrollManager />
       </Suspense>
+      {loadErrors.length > 0 ? (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {loadErrors.map((message) => (
+            <p key={message}>{message}</p>
+          ))}
+        </div>
+      ) : null}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <Link
