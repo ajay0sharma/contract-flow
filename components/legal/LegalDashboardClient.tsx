@@ -4,10 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApprovalReassignDialog } from "@/components/contracts/ApprovalReassignDialog";
+import { pickupLegalReviewerAction } from "@/app/actions/contracts";
 import { IntakeSettingsClient } from "@/components/legal/IntakeSettingsClient";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
 import { StageBadge } from "@/components/contracts/StageBadge";
 import { dedupeContractRecordsById } from "@/lib/dedupe-contract-records";
+import {
+  getLegalOwnerDisplay,
+  isAwaitingLegalPickup,
+} from "@/lib/legal-assignment";
 import { getCurrentApprover, isAwaitingApproval } from "@/lib/workflow-engine";
 import type { ContractLifecycleStatus, ContractRecord } from "@/types/contract";
 
@@ -109,20 +114,10 @@ function businessDaysSince(value: string, end: Date = new Date()): number {
 }
 
 function sortPendingQueue(contracts: ContractRecord[]): ContractRecord[] {
-  return [...contracts].sort((a, b) => {
-    const urgentA = businessDaysSince(a.updatedAt) > 5;
-    const urgentB = businessDaysSince(b.updatedAt) > 5;
-
-    if (urgentA !== urgentB) {
-      return urgentA ? -1 : 1;
-    }
-
-    if (b.amountNumeric !== a.amountNumeric) {
-      return b.amountNumeric - a.amountNumeric;
-    }
-
-    return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-  });
+  return [...contracts].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 }
 
 function resolveContractStatus(
@@ -199,6 +194,8 @@ function buildLegalContractsUrl(
     search?: string;
     page?: number;
     pageSize?: number;
+    sortBy?: "createdAt" | "updatedAt" | "amountNumeric" | "stage";
+    sortOrder?: "asc" | "desc";
   },
 ): string {
   const params = new URLSearchParams({ view });
@@ -221,6 +218,14 @@ function buildLegalContractsUrl(
 
   if (options?.pageSize) {
     params.set("pageSize", String(options.pageSize));
+  }
+
+  if (options?.sortBy) {
+    params.set("sortBy", options.sortBy);
+  }
+
+  if (options?.sortOrder) {
+    params.set("sortOrder", options.sortOrder);
   }
 
   return `/api/legal/contracts?${params.toString()}`;
@@ -272,6 +277,7 @@ export function LegalDashboardClient({
   const [reassignModal, setReassignModal] = useState<ReassignModalState | null>(
     null,
   );
+  const [pickupPendingId, setPickupPendingId] = useState<string | null>(null);
   const [approvalNote, setApprovalNote] = useState("");
 
   useEffect(() => {
@@ -341,7 +347,11 @@ export function LegalDashboardClient({
 
     try {
       const data = await fetchLegalContracts(
-        buildLegalContractsUrl("pending", { pageSize: 100 }),
+        buildLegalContractsUrl("pending", {
+          pageSize: 100,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        }),
       );
       setPendingContracts(dedupeContractRecordsById(data.contracts));
     } catch (loadError) {
@@ -369,6 +379,8 @@ export function LegalDashboardClient({
             search: filters.search || undefined,
             page: filters.page,
             pageSize: 50,
+            sortBy: "createdAt",
+            sortOrder: "desc",
           }),
         );
         setDatabaseContracts(dedupeContractRecordsById(data.contracts));
@@ -454,6 +466,24 @@ export function LegalDashboardClient({
       ),
     );
     await refreshDashboard(databaseFilters);
+  }
+
+  async function handlePickup(contractId: string): Promise<void> {
+    setPickupPendingId(contractId);
+    setError(null);
+
+    try {
+      await pickupLegalReviewerAction(contractId);
+      await refreshDashboard(databaseFilters);
+    } catch (pickupError) {
+      setError(
+        pickupError instanceof Error
+          ? pickupError.message
+          : "Failed to pick up contract.",
+      );
+    } finally {
+      setPickupPendingId(null);
+    }
   }
 
   function openApprovalModal(
@@ -645,7 +675,8 @@ export function LegalDashboardClient({
               Pending review queue
             </h2>
             <p className="text-sm text-slate-600">
-              All in-flight contracts, prioritized by urgency and age.
+              Newest submissions first. Unassigned records stay in the queue until
+              a legal user picks them up.
             </p>
           </div>
 
@@ -664,6 +695,9 @@ export function LegalDashboardClient({
                       Record number
                     </th>
                     <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
+                      Submitted
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
                       Requester
                     </th>
                     <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
@@ -676,7 +710,7 @@ export function LegalDashboardClient({
                       Amount
                     </th>
                     <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Current approver
+                      Legal owner
                     </th>
                     <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
                       Current stage
@@ -694,7 +728,12 @@ export function LegalDashboardClient({
                     const daysInStage = businessDaysSince(contract.updatedAt);
                     const isStale = daysInStage > 5;
                     const currentApprover = getCurrentApprover(contract);
-                    const canReassign = isAwaitingApproval(contract) && currentApprover;
+                    const legalOwner = getLegalOwnerDisplay(contract);
+                    const awaitingPickup = isAwaitingLegalPickup(contract);
+                    const canReassign =
+                      isAwaitingApproval(contract) &&
+                      currentApprover &&
+                      !awaitingPickup;
 
                     return (
                       <tr key={contract.id} className="hover:bg-slate-50">
@@ -705,6 +744,9 @@ export function LegalDashboardClient({
                           >
                             {contract.recordNumber}
                           </Link>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                          {contract.createdAt.slice(0, 10)}
                         </td>
                         <td className="px-4 py-3 text-slate-700">
                           {contract.requesterName}
@@ -719,17 +761,21 @@ export function LegalDashboardClient({
                           {contract.amount || "—"}
                         </td>
                         <td className="px-4 py-3 text-slate-700">
-                          {currentApprover ? (
+                          {legalOwner.unassigned ? (
+                            <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
+                              Unassigned
+                            </span>
+                          ) : (
                             <div>
                               <p className="font-medium text-slate-900">
-                                {currentApprover.assigneeName}
+                                {legalOwner.label}
                               </p>
-                              <p className="text-xs text-slate-500">
-                                {currentApprover.name}
-                              </p>
+                              {currentApprover?.id === "legal" ? (
+                                <p className="text-xs text-slate-500">
+                                  Legal review
+                                </p>
+                              ) : null}
                             </div>
-                          ) : (
-                            "—"
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -750,6 +796,21 @@ export function LegalDashboardClient({
                             >
                               View
                             </Link>
+                            {awaitingPickup ? (
+                              <button
+                                type="button"
+                                disabled={
+                                  pickupPendingId === contract.id ||
+                                  actionPendingId === contract.id
+                                }
+                                onClick={() => void handlePickup(contract.id)}
+                                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                              >
+                                {pickupPendingId === contract.id
+                                  ? "Picking up..."
+                                  : "Pick up"}
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               disabled={actionPendingId === contract.id || !canReassign}
@@ -760,7 +821,9 @@ export function LegalDashboardClient({
                             </button>
                             <button
                               type="button"
-                              disabled={actionPendingId === contract.id}
+                              disabled={
+                                actionPendingId === contract.id || awaitingPickup
+                              }
                               onClick={() =>
                                 openApprovalModal(contract, "approve")
                               }
@@ -770,7 +833,9 @@ export function LegalDashboardClient({
                             </button>
                             <button
                               type="button"
-                              disabled={actionPendingId === contract.id}
+                              disabled={
+                                actionPendingId === contract.id || awaitingPickup
+                              }
                               onClick={() =>
                                 openApprovalModal(contract, "reject")
                               }
@@ -917,7 +982,7 @@ export function LegalDashboardClient({
                         Stage
                       </th>
                       <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Updated
+                        Submitted
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Actions
@@ -965,7 +1030,7 @@ export function LegalDashboardClient({
                             )}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                            {contract.updatedAt.slice(0, 10)}
+                            {contract.createdAt.slice(0, 10)}
                           </td>
                           <td className="px-4 py-3">
                             <Link

@@ -1,5 +1,6 @@
 import {
   approveContractStep,
+  assignLegalReviewerStep,
   createContractFromIntake,
   getCurrentApprover,
   isAwaitingApproval,
@@ -1054,38 +1055,11 @@ export function assignContractLegalReviewer(
     throw new Error("Contract not found.");
   }
 
-  const contract = normalizeContractRecord(store[index]);
-  const legalStep = contract.workflowSteps.find((step) => step.id === "legal");
-
-  if (!legalStep) {
-    throw new Error("This contract does not have a legal review step.");
-  }
-
-  const timestamp = new Date().toISOString();
-  const updated = normalizeContractRecord({
-    ...contract,
-    workflowSteps: contract.workflowSteps.map((step) =>
-      step.id === "legal"
-        ? {
-            ...step,
-            assigneeEmail: assignee.email,
-            assigneeName: assignee.name,
-          }
-        : step,
-    ),
-    auditTrail: [
-      ...contract.auditTrail,
-      {
-        id: `audit-${Date.now()}`,
-        timestamp,
-        actorName: actor.name,
-        actorEmail: actor.email,
-        action: "Legal assignment updated",
-        detail: `Assigned legal review to ${assignee.name} (${assignee.email}).`,
-      },
-    ],
-    updatedAt: timestamp,
-  });
+  const updated = assignLegalReviewerStep(
+    normalizeContractRecord(store[index]),
+    assignee,
+    actor,
+  );
 
   store[index] = updated;
   return updated;

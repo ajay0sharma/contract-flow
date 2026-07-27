@@ -17,6 +17,9 @@ import {
   submitContractIntake,
   updateContractRecordDetails,
 } from "@/lib/contract-store";
+import { assignLegalReviewerAndPersist } from "@/lib/contract-persistence";
+import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { isDatabaseConfigured } from "@/lib/prisma";
 import { createCounterparty } from "@/lib/counterparty-store";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import type {
@@ -286,11 +289,38 @@ export async function assignLegalReviewerAction(
     throw new Error("Select a user with legal permissions.");
   }
 
-  assignContractLegalReviewer(contractId, assignee, actor);
+  if (isDatabaseConfigured()) {
+    await assignLegalReviewerAndPersist(
+      contractId,
+      resolveClauseLibraryOrganizationId(),
+      assignee,
+      actor,
+    );
+  } else {
+    assignContractLegalReviewer(contractId, assignee, actor);
+  }
 
   revalidatePath("/legal/dashboard");
   revalidatePath(`/contracts/${contractId}`);
   revalidatePath(`/contracts/${contractId}/review`);
+}
+
+export async function pickupLegalReviewerAction(contractId: string) {
+  const actor = await getActor();
+
+  if (!isLegalEmail(actor.email)) {
+    throw new Error("Only legal users can pick up contract records.");
+  }
+
+  const assignee = getLegalAssignableUsers().find(
+    (user) => user.email.toLowerCase() === actor.email.toLowerCase(),
+  );
+
+  if (!assignee) {
+    throw new Error("Your account is not configured as a legal reviewer.");
+  }
+
+  await assignLegalReviewerAction(contractId, assignee.email);
 }
 
 export async function updateContractRecordAction(

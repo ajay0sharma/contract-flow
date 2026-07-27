@@ -1,5 +1,6 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { Prisma } from "@/lib/generated/prisma/client";
+import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { getPrismaClient } from "@/lib/prisma";
 import {
   activateContract,
@@ -7,6 +8,7 @@ import {
   createContractFromIntake,
   reassignCurrentApprovalStep,
   rejectContractStep,
+  assignLegalReviewerStep,
 } from "@/lib/workflow-engine";
 import type {
   AuditEvent,
@@ -442,6 +444,23 @@ export async function reassignAndPersist(
     actor,
     note,
   );
+  await saveContractRecord(updated);
+  return updated;
+}
+
+export async function assignLegalReviewerAndPersist(
+  contractId: string,
+  organizationId: string,
+  assignee: { email: string; name: string },
+  actor: { email: string; name: string },
+): Promise<ContractRecord> {
+  const contract = await loadMergedContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const updated = assignLegalReviewerStep(contract, assignee, actor);
   await saveContractRecord(updated);
   return updated;
 }

@@ -34,13 +34,17 @@ export function resolveWorkflowSteps(
           : step.name,
       role: step.role,
       assigneeEmail:
-        step.id === "department-vp"
-          ? departmentVpApprover?.assigneeEmail ?? step.assigneeEmail
-          : step.assigneeEmail,
+        step.id === "legal"
+          ? ""
+          : step.id === "department-vp"
+            ? departmentVpApprover?.assigneeEmail ?? step.assigneeEmail
+            : step.assigneeEmail,
       assigneeName:
-        step.id === "department-vp"
-          ? departmentVpApprover?.assigneeName ?? step.assigneeName
-          : step.assigneeName,
+        step.id === "legal"
+          ? ""
+          : step.id === "department-vp"
+            ? departmentVpApprover?.assigneeName ?? step.assigneeName
+            : step.assigneeName,
       status: index === 0 ? "current" : "upcoming",
     }));
 }
@@ -211,6 +215,12 @@ export function approveContractStep(
     throw new Error("No pending approval step.");
   }
 
+  if (!currentStep.assigneeEmail.trim()) {
+    throw new Error(
+      "This contract has not been picked up yet. Assign a legal owner before approving.",
+    );
+  }
+
   if (
     currentStep.assigneeEmail.toLowerCase() !== approverEmail.toLowerCase()
   ) {
@@ -362,6 +372,60 @@ export function reassignCurrentApprovalStep(
   };
 }
 
+export function assignLegalReviewerStep(
+  contract: ContractRecord,
+  assignee: { email: string; name: string },
+  actor: { email: string; name: string },
+): ContractRecord {
+  const legalStep = contract.workflowSteps.find((step) => step.id === "legal");
+
+  if (!legalStep) {
+    throw new Error("This contract does not have a legal review step.");
+  }
+
+  const normalizedEmail = safeTrim(assignee.email).toLowerCase();
+  const normalizedName = safeTrim(assignee.name);
+
+  if (!normalizedEmail) {
+    throw new Error("Select a legal reviewer.");
+  }
+
+  if (!normalizedName) {
+    throw new Error("Assignee name is required.");
+  }
+
+  const previousLabel = legalStep.assigneeEmail.trim()
+    ? `${legalStep.assigneeName} (${legalStep.assigneeEmail})`
+    : "Unassigned";
+
+  return {
+    ...contract,
+    workflowSteps: contract.workflowSteps.map((step) =>
+      step.id === "legal"
+        ? {
+            ...step,
+            assigneeEmail: normalizedEmail,
+            assigneeName: normalizedName,
+          }
+        : step,
+    ),
+    auditTrail: [
+      ...contract.auditTrail,
+      createAuditEvent(
+        actor.name,
+        actor.email,
+        legalStep.assigneeEmail.trim()
+          ? "Legal assignment updated"
+          : "Legal review picked up",
+        legalStep.assigneeEmail.trim()
+          ? `Reassigned legal review from ${previousLabel} to ${normalizedName} (${normalizedEmail}).`
+          : `${normalizedName} (${normalizedEmail}) picked up this contract for legal review.`,
+      ),
+    ],
+    updatedAt: nowIsoTimestamp(),
+  };
+}
+
 export function rejectContractStep(
   contract: ContractRecord,
   approverEmail: string,
@@ -372,6 +436,12 @@ export function rejectContractStep(
 
   if (!currentStep) {
     throw new Error("No pending approval step.");
+  }
+
+  if (!currentStep.assigneeEmail.trim()) {
+    throw new Error(
+      "This contract has not been picked up yet. Assign a legal owner before rejecting.",
+    );
   }
 
   if (
