@@ -669,7 +669,7 @@ export function LegalDashboardClient({
       {activeTab === "intake" ? <IntakeSettingsClient /> : null}
 
       {activeTab === "pending" ? (
-        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">
               Pending review queue
@@ -687,170 +687,153 @@ export function LegalDashboardClient({
               No contracts are currently pending review.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              <table className="min-w-full divide-y divide-slate-200 text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Record number
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Submitted
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Requester
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Title
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Type
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Amount
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Legal owner
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Current stage
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Days in current stage
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold uppercase tracking-wide text-slate-500">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {pendingReview.map((contract) => {
-                    const daysInStage = businessDaysSince(contract.updatedAt);
-                    const isStale = daysInStage > 5;
-                    const currentApprover = getCurrentApprover(contract);
-                    const legalOwner = getLegalOwnerDisplay(contract);
-                    const awaitingPickup = isAwaitingLegalPickup(contract);
-                    const canReassign =
-                      isAwaitingApproval(contract) &&
-                      currentApprover &&
-                      !awaitingPickup;
+            <ul className="space-y-3">
+              {pendingReview.map((contract) => {
+                const daysInStage = businessDaysSince(contract.updatedAt);
+                const isStale = daysInStage > 5;
+                const currentApprover = getCurrentApprover(contract);
+                const legalOwner = getLegalOwnerDisplay(contract);
+                const awaitingPickup = isAwaitingLegalPickup(contract);
+                const canReassign =
+                  isAwaitingApproval(contract) &&
+                  currentApprover &&
+                  !awaitingPickup;
 
-                    return (
-                      <tr key={contract.id} className="hover:bg-slate-50">
-                        <td className="whitespace-nowrap px-4 py-3 font-medium text-indigo-700">
+                return (
+                  <li
+                    key={contract.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Link
                             href={`/contracts/${contract.id}`}
-                            className="hover:underline"
+                            className="font-medium text-indigo-700 hover:underline"
                           >
                             {contract.recordNumber}
                           </Link>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                          {contract.createdAt.slice(0, 10)}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {contract.requesterName}
-                        </td>
-                        <td className="px-4 py-3 text-slate-900">
-                          {contract.title}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {contract.contractType}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
-                          {contract.amount || "—"}
-                        </td>
-                        <td className="px-4 py-3 text-slate-700">
+                          <StageBadge stage={contract.stage} />
                           {legalOwner.unassigned ? (
                             <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
                               Unassigned
                             </span>
-                          ) : (
-                            <div>
-                              <p className="font-medium text-slate-900">
-                                {legalOwner.label}
-                              </p>
-                              {currentApprover?.id === "legal" ? (
-                                <p className="text-xs text-slate-500">
-                                  Legal review
-                                </p>
-                              ) : null}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <StageBadge stage={contract.stage} />
-                        </td>
-                        <td
-                          className={`px-4 py-3 font-medium ${
-                            isStale ? "text-rose-700" : "text-slate-700"
-                          }`}
-                        >
-                          {daysInStage}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <Link
-                              href={`/contracts/${contract.id}`}
-                              className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                            >
-                              View
-                            </Link>
-                            {awaitingPickup ? (
-                              <button
-                                type="button"
-                                disabled={
-                                  pickupPendingId === contract.id ||
-                                  actionPendingId === contract.id
-                                }
-                                onClick={() => void handlePickup(contract.id)}
-                                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
-                              >
-                                {pickupPendingId === contract.id
-                                  ? "Picking up..."
-                                  : "Pick up"}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              disabled={actionPendingId === contract.id || !canReassign}
-                              onClick={() => openReassignModal(contract)}
-                              className="rounded-md border border-indigo-200 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-60"
-                            >
-                              Re-route
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                actionPendingId === contract.id || awaitingPickup
-                              }
-                              onClick={() =>
-                                openApprovalModal(contract, "approve")
-                              }
-                              className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              disabled={
-                                actionPendingId === contract.id || awaitingPickup
-                              }
-                              onClick={() =>
-                                openApprovalModal(contract, "reject")
-                              }
-                              className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
-                            >
-                              Reject
-                            </button>
+                          ) : null}
+                          <span
+                            className={`text-xs font-medium ${
+                              isStale ? "text-rose-700" : "text-slate-500"
+                            }`}
+                          >
+                            {daysInStage} day{daysInStage === 1 ? "" : "s"} in stage
+                          </span>
+                        </div>
+
+                        <p className="mt-2 line-clamp-2 text-sm font-medium text-slate-900">
+                          {contract.title}
+                        </p>
+
+                        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Submitted
+                            </dt>
+                            <dd className="mt-0.5 text-slate-700">
+                              {contract.createdAt.slice(0, 10)}
+                            </dd>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Requester
+                            </dt>
+                            <dd className="mt-0.5 truncate text-slate-700">
+                              {contract.requesterName}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Type
+                            </dt>
+                            <dd className="mt-0.5 truncate text-slate-700">
+                              {contract.contractType}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Amount
+                            </dt>
+                            <dd className="mt-0.5 text-slate-700">
+                              {contract.amount || "—"}
+                            </dd>
+                          </div>
+                          <div className="min-w-0 sm:col-span-2">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Legal owner
+                            </dt>
+                            <dd className="mt-0.5 text-slate-700">
+                              {legalOwner.unassigned
+                                ? "Awaiting pickup"
+                                : legalOwner.label}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-md xl:justify-end">
+                        <Link
+                          href={`/contracts/${contract.id}`}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          View
+                        </Link>
+                        {awaitingPickup ? (
+                          <button
+                            type="button"
+                            disabled={
+                              pickupPendingId === contract.id ||
+                              actionPendingId === contract.id
+                            }
+                            onClick={() => void handlePickup(contract.id)}
+                            className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                          >
+                            {pickupPendingId === contract.id
+                              ? "Picking up..."
+                              : "Pick up"}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={actionPendingId === contract.id || !canReassign}
+                          onClick={() => openReassignModal(contract)}
+                          className="rounded-md border border-indigo-200 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-60"
+                        >
+                          Re-route
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            actionPendingId === contract.id || awaitingPickup
+                          }
+                          onClick={() => openApprovalModal(contract, "approve")}
+                          className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            actionPendingId === contract.id || awaitingPickup
+                          }
+                          onClick={() => openApprovalModal(contract, "reject")}
+                          className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </section>
       ) : (
