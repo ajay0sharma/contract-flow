@@ -104,11 +104,6 @@ export function ContractTypesAdminForm({
   }
 
   function handleDelete(type: ContractTypeRecord) {
-    if (type.isSystem) {
-      setError("System contract types cannot be deleted.");
-      return;
-    }
-
     const confirmed = window.confirm(
       type.isActive
         ? `Delete "${type.label}"? If it is used by contracts or templates, it will be deactivated instead.`
@@ -230,9 +225,8 @@ export function ContractTypesAdminForm({
           Contract types
         </h3>
         <p className="mt-1 text-sm text-stone-600">
-          System types are built in and cannot be deleted. Custom types can be
-          removed, or deactivated if already referenced by contracts or
-          templates.
+          Remove agreement types that are no longer needed. Types referenced by
+          contracts or templates are deactivated instead of permanently deleted.
         </p>
 
         <div className="mt-4 overflow-hidden rounded-md border border-stone-200">
@@ -292,18 +286,14 @@ export function ContractTypesAdminForm({
                     {type.isActive ? "Active" : "Inactive"}
                   </td>
                   <td className="px-4 py-3">
-                    {type.isSystem ? (
-                      <span className="text-xs text-stone-400">Protected</span>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => handleDelete(type)}
-                        className="text-sm font-medium text-red-700 hover:text-red-800 disabled:opacity-60"
-                      >
-                        Delete
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => handleDelete(type)}
+                      className="text-sm font-medium text-red-700 hover:text-red-800 disabled:opacity-60"
+                    >
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}

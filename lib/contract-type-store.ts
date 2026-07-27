@@ -122,16 +122,17 @@ export async function ensureSystemContractTypes(
   const seeds = buildSystemContractTypeSeed(organizationId);
 
   try {
+    const existingCount = await prisma.contractTypeDefinition.count({
+      where: { organizationId },
+    });
+
+    if (existingCount > 0) {
+      return;
+    }
+
     for (const seed of seeds) {
-      await prisma.contractTypeDefinition.upsert({
-        where: {
-          organizationId_slug: {
-            organizationId: seed.organizationId,
-            slug: seed.slug,
-          },
-        },
-        create: seed,
-        update: {},
+      await prisma.contractTypeDefinition.create({
+        data: seed,
       });
     }
   } catch {
@@ -388,10 +389,6 @@ export async function deleteContractType(
 
   if (!existing) {
     return { error: "Contract type not found." };
-  }
-
-  if (existing.isSystem) {
-    return { error: "System contract types cannot be deleted." };
   }
 
   if (!canUseContractTypeDatabase()) {
