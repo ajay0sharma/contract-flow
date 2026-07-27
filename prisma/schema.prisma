@@ -299,6 +299,8 @@ model ContractTypeDefinition {
   isActive       Boolean  @default(true)
   showInIntake   Boolean  @default(true)
   isSystem       Boolean  @default(false)
+  canBeParentAgreement     Boolean  @default(false)
+  requiresParentAgreement  Boolean  @default(false)
   createdById    String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

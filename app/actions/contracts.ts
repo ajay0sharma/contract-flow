@@ -42,6 +42,8 @@ import {
   isLegalEmail,
   isSupportEmail,
 } from "@/lib/access-control";
+import { resolveAgreementTypeRules } from "@/lib/contract-type-agreement-rules";
+import { listContractTypes } from "@/lib/contract-type-store";
 import { getWorkflowConfig } from "@/lib/workflow-store";
 import {
   getContractTemplateById,
@@ -90,10 +92,16 @@ export async function submitIntakeAction(
   }
 
   const workflowConfig = getWorkflowConfig();
+  const organizationId = resolveClauseLibraryOrganizationId(
+    input.companyProfileId,
+  );
+  const contractTypes = await listContractTypes(organizationId);
+  const agreementTypeRules = resolveAgreementTypeRules(
+    contractTypes,
+    workflowConfig.agreementTypeRules,
+  );
   const isChildAgreement =
-    workflowConfig.agreementTypeRules.childAgreementTypes.includes(
-      input.contractType,
-    );
+    agreementTypeRules.childAgreementTypes.includes(input.contractType);
 
   if (isChildAgreement && !input.parentAgreementId) {
     throw new Error("Select the active parent agreement for this child agreement.");
@@ -113,7 +121,7 @@ export async function submitIntakeAction(
     }
 
     if (
-      !workflowConfig.agreementTypeRules.parentAgreementTypes.includes(
+      !agreementTypeRules.parentAgreementTypes.includes(
         parentAgreement.contractType,
       )
     ) {

@@ -29,6 +29,8 @@ function mapContractTypeRecord(record: {
   isActive: boolean;
   showInIntake: boolean;
   isSystem: boolean;
+  canBeParentAgreement: boolean;
+  requiresParentAgreement: boolean;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -43,6 +45,8 @@ function mapContractTypeRecord(record: {
     isActive: record.isActive,
     showInIntake: record.showInIntake,
     isSystem: record.isSystem,
+    canBeParentAgreement: record.canBeParentAgreement,
+    requiresParentAgreement: record.requiresParentAgreement,
     createdById: record.createdById,
     createdAt: toIsoString(record.createdAt),
     updatedAt: toIsoString(record.updatedAt),
@@ -63,6 +67,8 @@ function getMemoryStore(): ContractTypeRecord[] {
         isActive: seed.isActive,
         showInIntake: true,
         isSystem: seed.isSystem,
+        canBeParentAgreement: false,
+        requiresParentAgreement: false,
         createdById: seed.createdById,
         createdAt: now,
         updatedAt: now,
@@ -221,6 +227,10 @@ export async function updateContractType(
       displayOrder: input.displayOrder ?? current.displayOrder,
       isActive: input.isActive ?? current.isActive,
       showInIntake: input.showInIntake ?? current.showInIntake,
+      canBeParentAgreement:
+        input.canBeParentAgreement ?? current.canBeParentAgreement,
+      requiresParentAgreement:
+        input.requiresParentAgreement ?? current.requiresParentAgreement,
       updatedAt: new Date().toISOString(),
     };
 
@@ -251,6 +261,12 @@ export async function updateContractType(
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         ...(input.showInIntake !== undefined
           ? { showInIntake: input.showInIntake }
+          : {}),
+        ...(input.canBeParentAgreement !== undefined
+          ? { canBeParentAgreement: input.canBeParentAgreement }
+          : {}),
+        ...(input.requiresParentAgreement !== undefined
+          ? { requiresParentAgreement: input.requiresParentAgreement }
           : {}),
       },
     });
@@ -305,6 +321,8 @@ export async function createContractType(
       isActive: true,
       showInIntake: true,
       isSystem: false,
+      canBeParentAgreement: input.canBeParentAgreement ?? false,
+      requiresParentAgreement: input.requiresParentAgreement ?? false,
       createdById: input.createdById,
       createdAt: now,
       updatedAt: now,
@@ -347,6 +365,8 @@ export async function createContractType(
         displayOrder: nextOrder,
         isActive: true,
         isSystem: false,
+        canBeParentAgreement: input.canBeParentAgreement ?? false,
+        requiresParentAgreement: input.requiresParentAgreement ?? false,
         createdById: input.createdById,
       },
     });
@@ -357,5 +377,80 @@ export async function createContractType(
       error:
         "Contract types database is not ready. Run `npx prisma migrate deploy` and restart the dev server.",
     };
+  }
+}
+
+export async function deleteContractType(
+  id: string,
+  organizationId: string,
+): Promise<{ type?: ContractTypeRecord; deleted?: boolean; error?: string }> {
+  const existing = await getContractTypeById(id, organizationId);
+
+  if (!existing) {
+    return { error: "Contract type not found." };
+  }
+
+  if (existing.isSystem) {
+    return { error: "System contract types cannot be deleted." };
+  }
+
+  if (!canUseContractTypeDatabase()) {
+    const store = getMemoryStore();
+    const index = store.findIndex(
+      (type) => type.id === id && type.organizationId === organizationId,
+    );
+
+    if (index === -1) {
+      return { error: "Contract type not found." };
+    }
+
+    store.splice(index, 1);
+    return { deleted: true };
+  }
+
+  try {
+    const prisma = getPrismaClient();
+    const [contractCount, templateCount] = await Promise.all([
+      prisma.contract.count({
+        where: {
+          companyProfileId: organizationId,
+          contractType: existing.label,
+        },
+      }),
+      prisma.contractTemplate.count({
+        where: {
+          organizationId,
+          contractType: existing.slug,
+        },
+      }),
+    ]);
+
+    if (contractCount > 0 || templateCount > 0) {
+      const deactivated = await updateContractType(id, organizationId, {
+        isActive: false,
+        showInIntake: false,
+      });
+
+      if (deactivated.error || !deactivated.type) {
+        return {
+          error:
+            deactivated.error ??
+            "Unable to deactivate contract type that is in use.",
+        };
+      }
+
+      return {
+        type: deactivated.type,
+        deleted: false,
+      };
+    }
+
+    await prisma.contractTypeDefinition.delete({
+      where: { id },
+    });
+
+    return { deleted: true };
+  } catch {
+    return { error: "Unable to delete contract type." };
   }
 }

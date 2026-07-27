@@ -1,5 +1,6 @@
 export const ADMIN_DASHBOARD_SECTIONS = [
   "submitted-contracts",
+  "contract-types",
   "workflow-settings",
   "workflow-policies",
   "user-settings",

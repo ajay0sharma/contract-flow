@@ -37,13 +37,21 @@ export async function POST(request: NextRequest) {
     return auth.response;
   }
 
-  let body: { label?: string; description?: string | null; organizationId?: string };
+  let body: {
+    label?: string;
+    description?: string | null;
+    organizationId?: string;
+    canBeParentAgreement?: boolean;
+    requiresParentAgreement?: boolean;
+  };
 
   try {
     body = (await request.json()) as {
       label?: string;
       description?: string | null;
       organizationId?: string;
+      canBeParentAgreement?: boolean;
+      requiresParentAgreement?: boolean;
     };
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
@@ -57,6 +65,8 @@ export async function POST(request: NextRequest) {
     label: body.label ?? "",
     description: body.description,
     createdById: auth.actor.email,
+    canBeParentAgreement: body.canBeParentAgreement,
+    requiresParentAgreement: body.requiresParentAgreement,
   });
 
   if (result.error || !result.type) {

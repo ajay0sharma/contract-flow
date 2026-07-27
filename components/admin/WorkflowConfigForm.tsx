@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { saveWorkflowConfigAction } from "@/app/actions/admin";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
-import { getAvailableCompanyConfigs } from "@/lib/company-config";
 import type { WorkflowConfig } from "@/lib/workflow-config-types";
 
 interface WorkflowConfigFormProps {
@@ -15,17 +14,6 @@ export function WorkflowConfigForm({ initialConfig }: WorkflowConfigFormProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const allContractTypes = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          getAvailableCompanyConfigs().flatMap(
-            (companyConfig) => companyConfig.contractTypes,
-          ),
-        ),
-      ).sort((a, b) => a.localeCompare(b)),
-    [],
-  );
 
   function updateRuleThreshold(ruleId: string, threshold: number) {
     setConfig((current) => ({
@@ -83,42 +71,6 @@ export function WorkflowConfigForm({ initialConfig }: WorkflowConfigFormProps) {
         step.id === stepId ? { ...step, [field]: value } : step,
       ),
     }));
-  }
-
-  function toggleAgreementType(
-    type: string,
-    relationship: "parent" | "child",
-  ) {
-    setConfig((current) => {
-      const parentTypes = new Set(
-        current.agreementTypeRules.parentAgreementTypes,
-      );
-      const childTypes = new Set(current.agreementTypeRules.childAgreementTypes);
-
-      if (relationship === "parent") {
-        if (parentTypes.has(type)) {
-          parentTypes.delete(type);
-        } else {
-          parentTypes.add(type);
-        }
-      } else if (childTypes.has(type)) {
-        childTypes.delete(type);
-      } else {
-        childTypes.add(type);
-      }
-
-      return {
-        ...current,
-        agreementTypeRules: {
-          parentAgreementTypes: [...parentTypes].sort((a, b) =>
-            a.localeCompare(b),
-          ),
-          childAgreementTypes: [...childTypes].sort((a, b) =>
-            a.localeCompare(b),
-          ),
-        },
-      };
-    });
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -255,55 +207,16 @@ export function WorkflowConfigForm({ initialConfig }: WorkflowConfigFormProps) {
           Parent and child agreement types
         </h2>
         <p className="mt-1 text-sm text-stone-600">
-          Define which agreement types can serve as active parent agreements and
-          which agreement types must link back to a parent when requested.
+          Configure which contract types can serve as parent agreements and which
+          require a parent link during intake from the{" "}
+          <a
+            href="/admin/dashboard?section=contract-types"
+            className="font-medium text-stone-900 underline"
+          >
+            Contract types
+          </a>{" "}
+          section.
         </p>
-        <div className="mt-4 overflow-hidden rounded-md border border-stone-200">
-          <table className="min-w-full divide-y divide-stone-200 text-sm">
-            <thead className="bg-stone-50 text-left text-stone-600">
-              <tr>
-                <th className="px-4 py-3 font-medium">Agreement type</th>
-                <th className="px-4 py-3 font-medium">Parent agreement</th>
-                <th className="px-4 py-3 font-medium">Child agreement</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {allContractTypes.map((type) => (
-                <tr key={type}>
-                  <td className="px-4 py-3 font-medium text-stone-900">
-                    {type}
-                  </td>
-                  <td className="px-4 py-3">
-                    <label className="inline-flex items-center gap-2 text-stone-700">
-                      <input
-                        type="checkbox"
-                        checked={config.agreementTypeRules.parentAgreementTypes.includes(
-                          type,
-                        )}
-                        onChange={() => toggleAgreementType(type, "parent")}
-                        className="h-4 w-4 rounded border-stone-300 text-stone-900"
-                      />
-                      Can be selected as parent
-                    </label>
-                  </td>
-                  <td className="px-4 py-3">
-                    <label className="inline-flex items-center gap-2 text-stone-700">
-                      <input
-                        type="checkbox"
-                        checked={config.agreementTypeRules.childAgreementTypes.includes(
-                          type,
-                        )}
-                        onChange={() => toggleAgreementType(type, "child")}
-                        className="h-4 w-4 rounded border-stone-300 text-stone-900"
-                      />
-                      Requires parent link
-                    </label>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </section>
 
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">

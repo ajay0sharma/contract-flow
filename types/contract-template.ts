@@ -57,6 +57,8 @@ export interface ContractTypeRecord {
   isActive: boolean;
   showInIntake: boolean;
   isSystem: boolean;
+  canBeParentAgreement: boolean;
+  requiresParentAgreement: boolean;
   createdById: string;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +69,8 @@ export interface CreateContractTypeInput {
   label: string;
   description?: string | null;
   createdById: string;
+  canBeParentAgreement?: boolean;
+  requiresParentAgreement?: boolean;
 }
 
 export interface UpdateContractTypeInput {
@@ -75,6 +79,8 @@ export interface UpdateContractTypeInput {
   displayOrder?: number;
   isActive?: boolean;
   showInIntake?: boolean;
+  canBeParentAgreement?: boolean;
+  requiresParentAgreement?: boolean;
 }
 
 export interface IntakeConfigTypeUpdate {

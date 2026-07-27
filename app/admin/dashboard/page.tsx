@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { AdminDashboardScrollManager } from "@/components/admin/AdminDashboardScrollManager";
 import { AdminSubmittedContractsTable } from "@/components/admin/AdminSubmittedContractsTable";
+import { ContractTypesAdminForm } from "@/components/admin/ContractTypesAdminForm";
 import { CreateUserForm } from "@/components/admin/CreateUserForm";
 import { UserRoleTable } from "@/components/admin/UserRoleTable";
 import { WorkflowConfigForm } from "@/components/admin/WorkflowConfigForm";
@@ -14,6 +15,7 @@ import {
 } from "@/app/actions/admin";
 import { adminDashboardSectionHref } from "@/lib/admin-dashboard-sections";
 import { getAllContracts } from "@/lib/contract-store";
+import { listContractTypes } from "@/lib/contract-type-store";
 import { getPlatformUsers } from "@/lib/user-store";
 import { getWorkflowConfig } from "@/lib/workflow-store";
 import { isAwaitingApproval } from "@/lib/workflow-engine";
@@ -31,6 +33,9 @@ export default async function AdminDashboardPage() {
   const workflow = getWorkflowConfig();
   const policy = await getAdminPolicyAction();
   const users = await listClerkUsersAction();
+  const contractTypes = await listContractTypes("default", {
+    includeInactive: true,
+  });
 
   const cards = [
     {
@@ -50,6 +55,12 @@ export default async function AdminDashboardPage() {
       value: platformUsers.length.toString(),
       href: adminDashboardSectionHref("user-settings"),
       detail: "Manage users and roles",
+    },
+    {
+      title: "Contract types",
+      value: contractTypes.filter((type) => type.isActive).length.toString(),
+      href: adminDashboardSectionHref("contract-types"),
+      detail: "Parent and child agreement setup",
     },
     {
       title: "Workflow steps",
@@ -90,6 +101,14 @@ export default async function AdminDashboardPage() {
           users as general users, legal users, or administrators.
         </p>
         <ul className="mt-4 grid gap-3 md:grid-cols-3">
+          <li>
+            <Link
+              href={adminDashboardSectionHref("contract-types")}
+              className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
+            >
+              Manage contract types
+            </Link>
+          </li>
           <li>
             <Link
               href={adminDashboardSectionHref("workflow-settings")}
@@ -136,6 +155,20 @@ export default async function AdminDashboardPage() {
           </p>
         </div>
         <AdminSubmittedContractsTable contracts={contracts} />
+      </section>
+
+      <section id="contract-types" className="mt-10 scroll-mt-20">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-stone-900">
+            Contract types
+          </h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Add or remove agreement types and configure whether each type can
+            serve as a parent agreement or must link to an existing parent
+            during intake.
+          </p>
+        </div>
+        <ContractTypesAdminForm initialTypes={contractTypes} />
       </section>
 
       <section id="workflow-settings" className="mt-10 scroll-mt-20">

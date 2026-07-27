@@ -1,0 +1,286 @@
+import { config } from "dotenv";
+import { resolve } from "node:path";
+import {
+  filterContractRecords,
+  listMergedContractRecords,
+  sortContractRecords,
+} from "@/lib/contract-list-service";
+import {
+  isAwaitingLegalPickup,
+  isLegalReviewUnassigned,
+} from "@/lib/legal-assignment";
+import { isDatabaseConfigured } from "@/lib/prisma";
+import {
+  approveAndPersist,
+  createAndPersistContract,
+  assignLegalReviewerAndPersist,
+} from "@/lib/contract-persistence";
+import type { ContractIntakeInput } from "@/types/contract";
+import {
+  approveContractStep,
+  assignLegalReviewerStep,
+  createContractFromIntake,
+  getCurrentApprover,
+  resolveWorkflowSteps,
+} from "@/lib/workflow-engine";
+
+config({ path: resolve(process.cwd(), ".env.local") });
+config({ path: resolve(process.cwd(), ".env") });
+
+const ORG_ID = "default";
+const LEGAL_USER = {
+  email: "ajay.sharma.jd@gmail.com",
+  name: "Ajay Sharma",
+};
+const BUSINESS_USER = {
+  email: "marcus@example.com",
+  name: "Marcus Test User",
+};
+
+type TestResult = {
+  name: string;
+  passed: boolean;
+  detail: string;
+};
+
+const results: TestResult[] = [];
+
+function pass(name: string, detail: string): void {
+  results.push({ name, passed: true, detail });
+  console.log(`✓ ${name} — ${detail}`);
+}
+
+function fail(name: string, detail: string): void {
+  results.push({ name, passed: false, detail });
+  console.error(`✗ ${name} — ${detail}`);
+}
+
+function assert(name: string, condition: boolean, detail: string): void {
+  if (condition) {
+    pass(name, detail);
+  } else {
+    fail(name, detail);
+  }
+}
+
+function buildTestIntake(suffix: string): ContractIntakeInput {
+  const today = new Date().toISOString().slice(0, 10);
+  const nextYear = new Date();
+  nextYear.setFullYear(nextYear.getFullYear() + 1);
+
+  return {
+    requesterName: BUSINESS_USER.name,
+    requesterEmail: BUSINESS_USER.email,
+    department: "Finance",
+    contractType: "Vendor Agreement",
+    contractStartDate: today,
+    contractEndDate: nextYear.toISOString().slice(0, 10),
+    contractTitle: `Automated flow test ${suffix}`,
+    contractDescription: "Created by scripts/test-contract-flows.ts",
+    contractAmount: "15000",
+    budgeted: true,
+    poNumber: "",
+    otherNotes: "Automated test record — safe to delete",
+    companyName: "Test Vendor LLC",
+    address: "123 Test Street",
+    mainContactName: "Taylor Test",
+    mainContactEmail: "taylor@testvendor.com",
+    companyProfileId: ORG_ID,
+  };
+}
+
+function runWorkflowUnitTests(): void {
+  const steps = resolveWorkflowSteps(15000, "Finance");
+  const legalStep = steps.find((step) => step.id === "legal");
+
+  assert(
+    "New intake legal step starts unassigned",
+    Boolean(legalStep && !legalStep.assigneeEmail.trim()),
+    legalStep
+      ? `legal assigneeEmail="${legalStep.assigneeEmail}"`
+      : "missing legal step",
+  );
+
+  const draft = createContractFromIntake(buildTestIntake("unit"), {
+    id: "test-unit-id",
+    recordNumber: "CR-TEST-001",
+  });
+
+  assert(
+    "Created intake is at legal review",
+    draft.stage === "legal_review",
+    `stage=${draft.stage}`,
+  );
+
+  assert(
+    "Created intake awaits legal pickup",
+    isAwaitingLegalPickup(draft),
+    getCurrentApprover(draft)?.id ?? "no current step",
+  );
+
+  const pickedUp = assignLegalReviewerStep(draft, LEGAL_USER, LEGAL_USER);
+
+  assert(
+    "Pickup assigns legal owner",
+    !isLegalReviewUnassigned(pickedUp),
+    getCurrentApprover(pickedUp)?.assigneeEmail ?? "none",
+  );
+
+  assert(
+    "Approve blocked before pickup on fresh draft",
+    (() => {
+      try {
+        approveContractStep(draft, LEGAL_USER.email, LEGAL_USER.name);
+        return false;
+      } catch (error) {
+        return (
+          error instanceof Error &&
+          error.message.includes("not been picked up")
+        );
+      }
+    })(),
+    "approve throws until pickup",
+  );
+
+  const approved = approveContractStep(
+    pickedUp,
+    LEGAL_USER.email,
+    LEGAL_USER.name,
+    "Automated test approval",
+  );
+
+  assert(
+    "Legal approval advances workflow",
+    approved.stage !== "legal_review",
+    `stage=${approved.stage}`,
+  );
+
+  const sorted = sortContractRecords(
+    [
+      { ...draft, createdAt: "2026-01-01T00:00:00.000Z" },
+      { ...pickedUp, createdAt: "2026-07-27T00:00:00.000Z" },
+    ],
+    "createdAt",
+    "desc",
+  );
+
+  assert(
+    "Pending queue sort prefers newest submission",
+    sorted[0]?.createdAt.startsWith("2026-07-27") ?? false,
+    sorted.map((item) => item.createdAt).join(", "),
+  );
+}
+
+async function runDatabaseIntegrationTests(): Promise<void> {
+  if (!isDatabaseConfigured()) {
+    pass(
+      "Database integration tests",
+      "Skipped — DATABASE_URL not configured in this environment",
+    );
+    return;
+  }
+
+  let createdId: string | null = null;
+
+  try {
+    const suffix = Date.now().toString();
+    const record = await createAndPersistContract(
+      buildTestIntake(suffix),
+      ORG_ID,
+    );
+    createdId = record.id;
+
+    assert(
+      "Persisted submission saved to database",
+      Boolean(record.id && record.recordNumber),
+      record.recordNumber,
+    );
+
+    assert(
+      "Persisted submission starts unassigned",
+      isAwaitingLegalPickup(record),
+      record.workflowSteps.find((step) => step.id === "legal")?.assigneeEmail ??
+        "none",
+    );
+
+    const merged = await listMergedContractRecords(ORG_ID);
+    const pending = filterContractRecords(merged, { view: "pending" });
+    const foundPending = pending.some((contract) => contract.id === record.id);
+
+    assert(
+      "Submission appears in legal pending queue",
+      foundPending,
+      `pending count=${pending.length}`,
+    );
+
+    const pickedUp = await assignLegalReviewerAndPersist(
+      record.id,
+      ORG_ID,
+      LEGAL_USER,
+      LEGAL_USER,
+    );
+
+    assert(
+      "Pickup persists legal owner",
+      pickedUp.workflowSteps.find((step) => step.id === "legal")
+        ?.assigneeEmail === LEGAL_USER.email,
+      LEGAL_USER.email,
+    );
+
+    const approved = await approveAndPersist(
+      record.id,
+      ORG_ID,
+      LEGAL_USER.email,
+      LEGAL_USER.name,
+      "Automated DB test approval",
+    );
+
+    assert(
+      "Legal approval persists stage change",
+      approved.stage !== "legal_review",
+      `stage=${approved.stage}`,
+    );
+  } catch (error) {
+    fail(
+      "Database integration tests",
+      error instanceof Error ? error.message : "Unknown database error",
+    );
+  } finally {
+    if (createdId) {
+      try {
+        const { getPrismaClient } = await import("@/lib/prisma");
+        const prisma = getPrismaClient();
+        await prisma.contract.delete({ where: { id: createdId } });
+        pass("Cleanup", `Deleted test contract ${createdId}`);
+      } catch (error) {
+        fail(
+          "Cleanup",
+          error instanceof Error
+            ? error.message
+            : "Could not delete test contract",
+        );
+      }
+    }
+  }
+}
+
+async function main(): Promise<void> {
+  console.log("ContractFlow contract flow tests\n");
+
+  runWorkflowUnitTests();
+  await runDatabaseIntegrationTests();
+
+  const failed = results.filter((result) => !result.passed);
+  console.log(
+    `\n${results.length - failed.length}/${results.length} checks passed`,
+  );
+
+  if (failed.length > 0) {
+    process.exitCode = 1;
+  }
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
