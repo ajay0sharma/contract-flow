@@ -80,7 +80,6 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
           icon: "clock",
         },
         { href: "/calendar", label: "Calendar", icon: "calendar" },
-        { href: "/renewals", label: "Renewals", icon: "refresh" },
         { href: "/search", label: "Search", icon: "search" },
       ],
     },
@@ -88,7 +87,6 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
       label: "Tools",
       links: [
         { href: "/legal/reports", label: "Reports", icon: "chart-bar" },
-        { href: "/legal/risk", label: "Risk dashboard", icon: "shield" },
         { href: "/legal/obligations", label: "Obligations", icon: "checklist" },
       ],
     },
@@ -102,11 +100,6 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
           icon: "library",
         },
         { href: "/legal/dashboard?view=intake", label: "Intake settings", icon: "settings" },
-        {
-          href: "/legal/workflow-settings",
-          label: "Workflow settings",
-          icon: "git-branch",
-        },
       ],
     },
   ],
@@ -141,13 +134,6 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
           icon: "shield-lock",
         },
         { href: "/settings/directory", label: "Directory", icon: "users-group" },
-      ],
-    },
-    {
-      label: "Account",
-      links: [
-        { href: "/admin/settings", label: "Settings", icon: "settings" },
-        { href: "/admin/settings", label: "Help", icon: "help-circle" },
       ],
     },
   ],

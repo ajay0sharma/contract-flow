@@ -1,13 +1,14 @@
-import { ComingSoonPage } from "@/components/layout/ComingSoonPage";
-import { LegalShell } from "@/components/legal/LegalShell";
-import { requireLegalPageUser } from "@/lib/page-auth";
+import { redirect } from "next/navigation";
+import { isAdminEmail } from "@/lib/legal-access";
+import { adminDashboardSectionHref } from "@/lib/admin-dashboard-sections";
+import { requireLegalOrAdminPageUser } from "@/lib/page-auth";
 
 export default async function LegalWorkflowSettingsPage() {
-  await requireLegalPageUser();
+  const { email } = await requireLegalOrAdminPageUser();
 
-  return (
-    <LegalShell title="Workflow settings">
-      <ComingSoonPage title="Workflow settings" />
-    </LegalShell>
-  );
+  if (isAdminEmail(email)) {
+    redirect(adminDashboardSectionHref("workflow-settings"));
+  }
+
+  redirect("/legal/dashboard");
 }

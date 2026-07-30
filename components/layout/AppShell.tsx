@@ -8,6 +8,7 @@ import { NavIcon } from "@/components/layout/NavIcon";
 import { AppHeaderBrand, useBranding } from "@/components/providers/BrandingProvider";
 import { useTier } from "@/components/providers/TierProvider";
 import { getHomePathForEmail } from "@/lib/legal-access";
+import { adminDashboardSectionHref } from "@/lib/admin-dashboard-sections";
 import { getNavigationSections } from "@/lib/navigation-config";
 import { getPersonInitials } from "@/lib/person-display";
 
@@ -269,7 +270,7 @@ export function AppShell({ children }: AppShellProps) {
                 <Link
                   href={
                     tier === "admin"
-                      ? "/admin/settings"
+                      ? adminDashboardSectionHref("user-settings")
                       : tier === "legal"
                         ? "/settings/templates"
                         : "/dashboard"

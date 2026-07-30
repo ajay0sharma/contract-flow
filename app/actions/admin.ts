@@ -11,12 +11,6 @@ import {
   upsertPlatformUser,
   updatePlatformUserRole,
 } from "@/lib/user-store";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
-import {
-  createContractType,
-  deleteContractType,
-  updateContractType,
-} from "@/lib/contract-type-store";
 import { updateWorkflowPolicy, getWorkflowPolicy } from "@/lib/policy-store";
 import type { WorkflowConfig, WorkflowPolicy } from "@/lib/workflow-config-types";
 import { updateWorkflowConfig } from "@/lib/workflow-store";
@@ -147,78 +141,4 @@ export async function requireAdminPage() {
 export async function getAdminPolicyAction() {
   await requireAdmin();
   return getWorkflowPolicy();
-}
-
-export async function createAdminContractTypeAction(input: {
-  label: string;
-  description?: string | null;
-  canBeParentAgreement?: boolean;
-  requiresParentAgreement?: boolean;
-}) {
-  const admin = await requireAdmin();
-  const organizationId = resolveClauseLibraryOrganizationId();
-  const result = await createContractType({
-    organizationId,
-    label: input.label,
-    description: input.description,
-    createdById: admin.email,
-    canBeParentAgreement: input.canBeParentAgreement ?? false,
-    requiresParentAgreement: input.requiresParentAgreement ?? false,
-  });
-
-  if (result.error || !result.type) {
-    throw new Error(result.error ?? "Unable to create contract type.");
-  }
-
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/legal/dashboard");
-  revalidatePath("/contracts/new");
-
-  return result.type;
-}
-
-export async function updateAdminContractTypeAction(input: {
-  id: string;
-  canBeParentAgreement?: boolean;
-  requiresParentAgreement?: boolean;
-  label?: string;
-  description?: string | null;
-}) {
-  await requireAdmin();
-  const organizationId = resolveClauseLibraryOrganizationId();
-  const result = await updateContractType(input.id, organizationId, {
-    label: input.label,
-    description: input.description,
-    canBeParentAgreement: input.canBeParentAgreement,
-    requiresParentAgreement: input.requiresParentAgreement,
-  });
-
-  if (result.error || !result.type) {
-    throw new Error(result.error ?? "Unable to update contract type.");
-  }
-
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/legal/dashboard");
-  revalidatePath("/contracts/new");
-
-  return result.type;
-}
-
-export async function deleteAdminContractTypeAction(id: string) {
-  await requireAdmin();
-  const organizationId = resolveClauseLibraryOrganizationId();
-  const result = await deleteContractType(id, organizationId);
-
-  if (result.error) {
-    throw new Error(result.error);
-  }
-
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/legal/dashboard");
-  revalidatePath("/contracts/new");
-
-  return {
-    deleted: result.deleted ?? false,
-    type: result.type ?? null,
-  };
 }
