@@ -127,6 +127,11 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
           label: "Workflow rules",
           icon: "git-branch",
         },
+        {
+          href: adminDashboardSectionHref("intake-form"),
+          label: "Intake form",
+          icon: "settings",
+        },
         { href: "/admin/integrations", label: "Integrations", icon: "plug" },
         {
           href: adminDashboardSectionHref("workflow-policies"),

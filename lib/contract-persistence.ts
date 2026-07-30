@@ -249,6 +249,10 @@ function mapRecordToPrismaData(
     companyProfileId: record.companyProfileId || null,
     templateId: record.templateId,
     templateVersion: record.templateVersion,
+    intakeFormId: record.intakeFormId ?? null,
+    contractVariables: record.contractVariables
+      ? toJsonValue(record.contractVariables)
+      : undefined,
     stage: record.stage,
     currentStepIndex: record.currentStepIndex,
     workflowSteps: toJsonValue(record.workflowSteps),
@@ -315,6 +319,8 @@ export async function saveContractRecord(
       companyProfileId: data.companyProfileId,
       templateId: data.templateId,
       templateVersion: data.templateVersion,
+      intakeFormId: data.intakeFormId,
+      contractVariables: data.contractVariables,
       stage: data.stage,
       contractStatus: data.contractStatus,
       ...(data.activatedAt ? { activatedAt: data.activatedAt } : {}),

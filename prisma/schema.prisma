@@ -487,3 +487,53 @@ model DirectoryUser {
   @@index([isActive])
   @@index([displayName])
 }
+
+model IntakeFormDefinition {
+  id             String              @id @default(cuid())
+  organizationId String
+  name           String              @default("Default")
+  isActive       Boolean             @default(true)
+  sections       IntakeFormSection[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+}
+
+model IntakeFormSection {
+  id           String              @id @default(cuid())
+  formId       String
+  form         IntakeFormDefinition @relation(fields: [formId], references: [id], onDelete: Cascade)
+  key          String
+  label        String
+  description  String?             @db.Text
+  displayOrder Int                 @default(0)
+  isSystem     Boolean             @default(false)
+  fields       IntakeFormField[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@unique([formId, key])
+  @@index([formId, displayOrder])
+}
+
+model IntakeFormField {
+  id            String                    @id @default(cuid())
+  sectionId     String
+  section       IntakeFormSection         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  key           String
+  label         String
+  fieldType     TemplateVariableFieldType @default(text)
+  isRequired    Boolean                   @default(false)
+  isSystem      Boolean                   @default(false)
+  displayOrder  Int                       @default(0)
+  helpText      String?                   @db.Text
+  placeholder   String?
+  selectOptions Json?
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@unique([sectionId, key])
+  @@index([sectionId, displayOrder])
+}

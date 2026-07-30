@@ -31,7 +31,9 @@ import {
   SelectedTemplateSummaryCard,
 } from "@/components/contracts/IntakeSelectionSummary";
 import { TemplateVariableForm } from "@/components/contracts/TemplateVariableForm";
+import { CustomIntakeSections } from "@/components/contracts/CustomIntakeSections";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
+import { createIntakeFormLayoutHelpers } from "@/lib/intake-form-layout";
 import {
   buildVariableValuesFromIntakeForm,
   resolveCompanyContractType,
@@ -55,6 +57,7 @@ import {
 } from "@/lib/intake-documents";
 import { isPopulated } from "@/lib/string-utils";
 import type { ContractIntakeInput, ContractRecord } from "@/types/contract";
+import type { IntakeFormDefinitionRecord } from "@/types/intake-form";
 import type { IntakePoConfig, PoLookupResult } from "@/types/po-integration";
 import { mapPoResultToFormFields } from "@/types/po-integration";
 
@@ -143,6 +146,7 @@ interface ContractIntakeFormProps {
   parentAgreementOptions: ContractRecord[];
   contractTemplates: ContractTemplateRecord[];
   intakeContractTypes: ContractTypeRecord[];
+  intakeFormLayout: IntakeFormDefinitionRecord | null;
 }
 
 type IntakePath = "pick-template" | "form";
@@ -232,9 +236,14 @@ export function ContractIntakeForm({
   parentAgreementOptions,
   contractTemplates,
   intakeContractTypes,
+  intakeFormLayout,
 }: ContractIntakeFormProps) {
   const router = useRouter();
   const formId = useId();
+  const intakeLayout = useMemo(
+    () => createIntakeFormLayoutHelpers(intakeFormLayout),
+    [intakeFormLayout],
+  );
   const contractTypeSectionRef = useRef<HTMLElement>(null);
   const nextAttachmentIdRef = useRef(1);
   const [intakePath, setIntakePath] = useState<IntakePath>("pick-template");
@@ -253,6 +262,9 @@ export function ContractIntakeForm({
   const [companyId, setCompanyId] = useState("default");
   const [counterpartySelection, setCounterpartySelection] = useState("");
   const [form, setForm] = useState(initialFormState);
+  const [customFieldValues, setCustomFieldValues] = useState<
+    Record<string, string>
+  >({});
   const [pendingAttachments, setPendingAttachments] = useState<
     PendingAttachment[]
   >(() => [
@@ -617,6 +629,13 @@ export function ContractIntakeForm({
     setShowTemplatePicker(true);
   }
 
+  function handleCustomFieldChange(key: string, value: string): void {
+    setCustomFieldValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
+
   function handleChange(
     field: keyof typeof initialFormState,
     value: string,
@@ -841,24 +860,49 @@ export function ContractIntakeForm({
     event.preventDefault();
     setError(null);
 
-    if (!counterpartySelection) {
+    if (
+      intakeLayout.isSectionVisible("counterparty_information") &&
+      intakeLayout.isFieldVisible("counterparty_information", "counterpartyProfile") &&
+      !counterpartySelection
+    ) {
       setError("Select a saved counterparty or create a new counterparty profile.");
       return;
     }
 
-    if (isAmountPopulated(form.contractAmount) && budgeted === null) {
+    if (
+      intakeLayout.isFieldVisible("contract_details", "budgeted") &&
+      isAmountPopulated(form.contractAmount) &&
+      budgeted === null
+    ) {
       setError("Select whether this contract is budgeted (Yes or No).");
       return;
     }
 
-    if (isChildAgreement && !form.parentAgreementId) {
+    if (
+      intakeLayout.isFieldVisible("contract_details", "parentAgreementId") &&
+      isChildAgreement &&
+      !form.parentAgreementId
+    ) {
       setError("Select the active parent agreement for this child agreement.");
       return;
     }
 
-    if (poRequiredForType && !form.poNumber.trim()) {
+    if (
+      intakeLayout.isFieldVisible("contract_details", "poNumber") &&
+      poRequiredForType &&
+      !form.poNumber.trim()
+    ) {
       setError("PO number is required for this contract type.");
       return;
+    }
+
+    for (const section of intakeLayout.customSections()) {
+      for (const field of section.fields) {
+        if (field.isRequired && !customFieldValues[field.key]?.trim()) {
+          setError(`Enter a value for "${field.label}".`);
+          return;
+        }
+      }
     }
 
     if (!form.contractType || !selectedTemplateType) {
@@ -961,6 +1005,11 @@ export function ContractIntakeForm({
           attachments: attachments.length > 0 ? attachments : undefined,
           templateId: selectedTemplateId ?? undefined,
           templateVersion: selectedTemplateVersion ?? undefined,
+          intakeFormId: intakeFormLayout?.id,
+          customFields:
+            Object.keys(customFieldValues).length > 0
+              ? customFieldValues
+              : undefined,
         };
 
         const response = await fetch("/api/contracts", {
@@ -1075,16 +1124,30 @@ export function ContractIntakeForm({
         </section>
       ) : null}
 
+      {intakeLayout.isSectionVisible("company_configuration") ? (
       <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
         <h2 className="text-base font-semibold text-foreground">
-          Company configuration
+          {intakeLayout.getSectionLabel(
+            "company_configuration",
+            "Company configuration",
+          )}
         </h2>
         <p className="mt-1 text-sm text-text-muted">
-          Department and contract type options change based on the selected
-          company profile.
+          {intakeLayout.getSectionDescription(
+            "company_configuration",
+            "Department and contract type options change based on the selected company profile.",
+          )}
         </p>
+        {intakeLayout.isFieldVisible("company_configuration", "companyProfile") ? (
         <div className="mt-5 max-w-md">
-          <FormField label="Company profile" htmlFor="companyProfile">
+          <FormField
+            label={intakeLayout.getFieldLabel(
+              "company_configuration",
+              "companyProfile",
+              "Company profile",
+            )}
+            htmlFor="companyProfile"
+          >
             <select
               id="companyProfile"
               value={companyId}
@@ -1099,17 +1162,32 @@ export function ContractIntakeForm({
             </select>
           </FormField>
         </div>
+        ) : null}
       </section>
+      ) : null}
 
+      {intakeLayout.isSectionVisible("requester_information") ? (
       <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
         <h2 className="text-base font-semibold text-foreground">
-          Requester information
+          {intakeLayout.getSectionLabel(
+            "requester_information",
+            "Requester information",
+          )}
         </h2>
         <div className="mt-5 grid gap-5 md:grid-cols-2">
+          {intakeLayout.isFieldVisible("requester_information", "requesterName") ? (
           <FormField
-            label="Requester name"
+            label={intakeLayout.getFieldLabel(
+              "requester_information",
+              "requesterName",
+              "Requester name",
+            )}
             htmlFor="requesterName"
-            hint="Auto-filled from your signed-in account."
+            hint={intakeLayout.getFieldHelpText(
+              "requester_information",
+              "requesterName",
+              "Auto-filled from your signed-in account.",
+            )}
           >
             <input
               id="requesterName"
@@ -1120,12 +1198,25 @@ export function ContractIntakeForm({
               className={readOnlyInputClassName}
             />
           </FormField>
+          ) : null}
 
-          <FormField label="Department" htmlFor="department">
+          {intakeLayout.isFieldVisible("requester_information", "department") ? (
+          <FormField
+            label={intakeLayout.getFieldLabel(
+              "requester_information",
+              "department",
+              "Department",
+            )}
+            htmlFor="department"
+          >
             <select
               id="department"
               name="department"
-              required
+              required={intakeLayout.isFieldRequired(
+                "requester_information",
+                "department",
+                true,
+              )}
               value={form.department}
               onChange={(event) => {
                 handleChange("department", event.target.value);
@@ -1142,12 +1233,15 @@ export function ContractIntakeForm({
             </select>
             {renderPoAutoFillBadge("department")}
           </FormField>
+          ) : null}
         </div>
       </section>
+      ) : null}
 
+      {intakeLayout.isSectionVisible("contract_details") ? (
       <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
         <h2 className="text-base font-semibold text-foreground">
-          Contract details
+          {intakeLayout.getSectionLabel("contract_details", "Contract details")}
         </h2>
 
         {contractTypeConfirmed && selectedTemplateType ? (
@@ -1184,12 +1278,21 @@ export function ContractIntakeForm({
         />
 
         <div className="mt-5 grid gap-5 md:grid-cols-2">
-          {isChildAgreement ? (
+          {isChildAgreement &&
+          intakeLayout.isFieldVisible("contract_details", "parentAgreementId") ? (
             <div className="md:col-span-2">
               <FormField
-                label="Parent agreement"
+                label={intakeLayout.getFieldLabel(
+                  "contract_details",
+                  "parentAgreementId",
+                  "Parent agreement",
+                )}
                 htmlFor="parentAgreementId"
-                hint="Required for child agreements. Search by record ID, title, counterparty, or agreement type."
+                hint={intakeLayout.getFieldHelpText(
+                  "contract_details",
+                  "parentAgreementId",
+                  "Required for child agreements. Search by record ID, title, counterparty, or agreement type.",
+                )}
               >
                 <ParentAgreementSearchField
                   id="parentAgreementId"
@@ -1198,7 +1301,11 @@ export function ContractIntakeForm({
                   onChange={(contractId) =>
                     handleChange("parentAgreementId", contractId)
                   }
-                  required
+                  required={intakeLayout.isFieldRequired(
+                    "contract_details",
+                    "parentAgreementId",
+                    true,
+                  )}
                 />
               </FormField>
             </div>
@@ -1206,13 +1313,27 @@ export function ContractIntakeForm({
             <div className="hidden md:block" />
           )}
 
+          {intakeLayout.isFieldVisible("contract_details", "contractStartDate") ||
+          intakeLayout.isFieldVisible("contract_details", "contractEndDate") ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:col-span-2">
-            <FormField label="Contract start date" htmlFor="contractStartDate">
+            {intakeLayout.isFieldVisible("contract_details", "contractStartDate") ? (
+            <FormField
+              label={intakeLayout.getFieldLabel(
+                "contract_details",
+                "contractStartDate",
+                "Contract start date",
+              )}
+              htmlFor="contractStartDate"
+            >
               <input
                 id="contractStartDate"
                 name="contractStartDate"
                 type="date"
-                required
+                required={intakeLayout.isFieldRequired(
+                  "contract_details",
+                  "contractStartDate",
+                  true,
+                )}
                 value={form.contractStartDate}
                 onChange={(event) =>
                   handleChange("contractStartDate", event.target.value)
@@ -1220,13 +1341,26 @@ export function ContractIntakeForm({
                 className={inputClassName}
               />
             </FormField>
+            ) : null}
 
-            <FormField label="Contract end date" htmlFor="contractEndDate">
+            {intakeLayout.isFieldVisible("contract_details", "contractEndDate") ? (
+            <FormField
+              label={intakeLayout.getFieldLabel(
+                "contract_details",
+                "contractEndDate",
+                "Contract end date",
+              )}
+              htmlFor="contractEndDate"
+            >
               <input
                 id="contractEndDate"
                 name="contractEndDate"
                 type="date"
-                required
+                required={intakeLayout.isFieldRequired(
+                  "contract_details",
+                  "contractEndDate",
+                  true,
+                )}
                 min={form.contractStartDate || undefined}
                 value={form.contractEndDate}
                 onChange={(event) =>
@@ -1235,15 +1369,32 @@ export function ContractIntakeForm({
                 className={inputClassName}
               />
             </FormField>
+            ) : null}
           </div>
+          ) : null}
 
-          <FormField label="Contract title" htmlFor="contractTitle">
+          {intakeLayout.isFieldVisible("contract_details", "contractTitle") ? (
+          <FormField
+            label={intakeLayout.getFieldLabel(
+              "contract_details",
+              "contractTitle",
+              "Contract title",
+            )}
+            htmlFor="contractTitle"
+          >
             <input
               id="contractTitle"
               name="contractTitle"
               type="text"
-              required
-              placeholder="Master Services Agreement — Acme Corp"
+              required={intakeLayout.isFieldRequired(
+                "contract_details",
+                "contractTitle",
+                true,
+              )}
+              placeholder={
+                intakeLayout.getField("contract_details", "contractTitle")
+                  ?.placeholder ?? "Master Services Agreement — Acme Corp"
+              }
               value={form.contractTitle}
               onChange={(event) =>
                 handleChange("contractTitle", event.target.value)
@@ -1251,17 +1402,30 @@ export function ContractIntakeForm({
               className={inputClassName}
             />
           </FormField>
+          ) : null}
 
+          {intakeLayout.isFieldVisible("contract_details", "contractAmount") ? (
           <FormField
-            label="Contract amount"
+            label={intakeLayout.getFieldLabel(
+              "contract_details",
+              "contractAmount",
+              "Contract amount",
+            )}
             htmlFor="contractAmount"
-            hint="Optional. Leave blank for agreements without a dollar value."
+            hint={intakeLayout.getFieldHelpText(
+              "contract_details",
+              "contractAmount",
+              "Optional. Leave blank for agreements without a dollar value.",
+            )}
           >
             <input
               id="contractAmount"
               name="contractAmount"
               type="text"
-              placeholder="$240,000"
+              placeholder={
+                intakeLayout.getField("contract_details", "contractAmount")
+                  ?.placeholder ?? "$240,000"
+              }
               value={form.contractAmount}
               onChange={(event) => {
                 handleChange("contractAmount", event.target.value);
@@ -1271,13 +1435,23 @@ export function ContractIntakeForm({
             />
             {renderPoAutoFillBadge("contractAmount")}
           </FormField>
+          ) : null}
 
-          {isAmountPopulated(form.contractAmount) ? (
+          {intakeLayout.isFieldVisible("contract_details", "budgeted") &&
+          isAmountPopulated(form.contractAmount) ? (
             <div className="md:col-span-2">
               <FormField
-                label="Budgeted?"
+                label={intakeLayout.getFieldLabel(
+                  "contract_details",
+                  "budgeted",
+                  "Budgeted?",
+                )}
                 htmlFor="budgeted-yes"
-                hint="Required when a contract amount is entered."
+                hint={intakeLayout.getFieldHelpText(
+                  "contract_details",
+                  "budgeted",
+                  "Required when a contract amount is entered.",
+                )}
               >
                 <fieldset className="mt-2">
                   <div className="flex flex-wrap gap-6">
@@ -1288,7 +1462,11 @@ export function ContractIntakeForm({
                         type="radio"
                         checked={budgeted === true}
                         onChange={() => setBudgeted(true)}
-                        required
+                        required={intakeLayout.isFieldRequired(
+                          "contract_details",
+                          "budgeted",
+                          true,
+                        )}
                         className="h-4 w-4 border-border text-accent"
                       />
                       Yes
@@ -1300,7 +1478,11 @@ export function ContractIntakeForm({
                         type="radio"
                         checked={budgeted === false}
                         onChange={() => setBudgeted(false)}
-                        required
+                        required={intakeLayout.isFieldRequired(
+                          "contract_details",
+                          "budgeted",
+                          true,
+                        )}
                         className="h-4 w-4 border-border text-accent"
                       />
                       No
@@ -1311,7 +1493,8 @@ export function ContractIntakeForm({
             </div>
           ) : null}
 
-          {showPoNumberField ? (
+          {intakeLayout.isFieldVisible("contract_details", "poNumber") &&
+          showPoNumberField ? (
             <div>
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <label
@@ -1459,22 +1642,42 @@ export function ContractIntakeForm({
             </div>
           ) : null}
 
+          {intakeLayout.isFieldVisible("contract_details", "contractDescription") ? (
           <div className="md:col-span-2">
             <FormField
-              label={generatedFromTemplate ? "Contract body" : "Contract description"}
+              label={
+                generatedFromTemplate
+                  ? "Contract body"
+                  : intakeLayout.getFieldLabel(
+                      "contract_details",
+                      "contractDescription",
+                      "Contract description",
+                    )
+              }
               htmlFor="contractDescription"
               hint={
                 generatedFromTemplate
                   ? "Generated from your template. Edit freely before submitting."
-                  : undefined
+                  : intakeLayout.getFieldHelpText(
+                      "contract_details",
+                      "contractDescription",
+                    )
               }
             >
               <textarea
                 id="contractDescription"
                 name="contractDescription"
                 rows={generatedFromTemplate ? 12 : 4}
-                required
-                placeholder="Brief summary of scope, deliverables, and key terms."
+                required={intakeLayout.isFieldRequired(
+                  "contract_details",
+                  "contractDescription",
+                  true,
+                )}
+                placeholder={
+                  intakeLayout.getField("contract_details", "contractDescription")
+                    ?.placeholder ??
+                  "Brief summary of scope, deliverables, and key terms."
+                }
                 value={form.contractDescription}
                 onChange={(event) => {
                   handleChange("contractDescription", event.target.value);
@@ -1492,14 +1695,26 @@ export function ContractIntakeForm({
               {renderPoAutoFillBadge("contractDescription")}
             </FormField>
           </div>
+          ) : null}
 
+          {intakeLayout.isFieldVisible("contract_details", "otherNotes") ? (
           <div className="md:col-span-2">
-            <FormField label="Other notes" htmlFor="otherNotes">
+            <FormField
+              label={intakeLayout.getFieldLabel(
+                "contract_details",
+                "otherNotes",
+                "Other notes",
+              )}
+              htmlFor="otherNotes"
+            >
               <textarea
                 id="otherNotes"
                 name="otherNotes"
                 rows={3}
-                placeholder="Optional context for approvers."
+                placeholder={
+                  intakeLayout.getField("contract_details", "otherNotes")
+                    ?.placeholder ?? "Optional context for approvers."
+                }
                 value={form.otherNotes}
                 onChange={(event) =>
                   handleChange("otherNotes", event.target.value)
@@ -1508,18 +1723,26 @@ export function ContractIntakeForm({
               />
             </FormField>
           </div>
+          ) : null}
         </div>
       </section>
+      ) : null}
 
+      {intakeLayout.isSectionVisible("supporting_documents") ? (
       <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-foreground">
-              Supporting documents
+              {intakeLayout.getSectionLabel(
+                "supporting_documents",
+                "Supporting documents",
+              )}
             </h2>
             <p className="mt-1 text-sm text-text-muted">
-              Optionally attach one or more documents. The uploaded file name
-              becomes the attachment title on the contract record.
+              {intakeLayout.getSectionDescription(
+                "supporting_documents",
+                "Optionally attach one or more documents. The uploaded file name becomes the attachment title on the contract record.",
+              )}
             </p>
           </div>
           <button
@@ -1605,22 +1828,44 @@ export function ContractIntakeForm({
           ))}
         </div>
       </section>
+      ) : null}
 
+      {intakeLayout.isSectionVisible("counterparty_information") ? (
       <section className="rounded-lg border border-border bg-surface p-6 shadow-sm">
         <h2 className="text-base font-semibold text-foreground">
-          Counterparty information
+          {intakeLayout.getSectionLabel(
+            "counterparty_information",
+            "Counterparty information",
+          )}
         </h2>
         <p className="mt-1 text-sm text-text-muted">
-          Choose a saved counterparty profile or create a new one for this
-          request.
+          {intakeLayout.getSectionDescription(
+            "counterparty_information",
+            "Choose a saved counterparty profile or create a new one for this request.",
+          )}
         </p>
 
         <div className="mt-5 grid gap-5 md:grid-cols-2">
+          {intakeLayout.isFieldVisible(
+            "counterparty_information",
+            "counterpartyProfile",
+          ) ? (
           <div className="md:col-span-2">
-            <FormField label="Counterparty" htmlFor="counterpartyProfile">
+            <FormField
+              label={intakeLayout.getFieldLabel(
+                "counterparty_information",
+                "counterpartyProfile",
+                "Counterparty",
+              )}
+              htmlFor="counterpartyProfile"
+            >
               <select
                 id="counterpartyProfile"
-                required
+                required={intakeLayout.isFieldRequired(
+                  "counterparty_information",
+                  "counterpartyProfile",
+                  true,
+                )}
                 value={counterpartySelection}
                 onChange={(event) =>
                   handleCounterpartyChange(event.target.value)
@@ -1639,6 +1884,7 @@ export function ContractIntakeForm({
               </select>
             </FormField>
           </div>
+          ) : null}
 
           {isExistingCounterparty ? (
             <p className="md:col-span-2 text-sm text-text-secondary">
@@ -1656,14 +1902,32 @@ export function ContractIntakeForm({
 
           {counterpartySelection ? (
             <>
-              <FormField label="Company name" htmlFor="companyName">
+              {intakeLayout.isFieldVisible(
+                "counterparty_information",
+                "companyName",
+              ) ? (
+              <FormField
+                label={intakeLayout.getFieldLabel(
+                  "counterparty_information",
+                  "companyName",
+                  "Company name",
+                )}
+                htmlFor="companyName"
+              >
                 <input
                   id="companyName"
                   name="companyName"
                   type="text"
-                  required
+                  required={intakeLayout.isFieldRequired(
+                    "counterparty_information",
+                    "companyName",
+                    true,
+                  )}
                   readOnly={isExistingCounterparty}
-                  placeholder="Acme Corp"
+                  placeholder={
+                    intakeLayout.getField("counterparty_information", "companyName")
+                      ?.placeholder ?? "Acme Corp"
+                  }
                   value={form.companyName}
                   onChange={(event) => {
                     handleChange("companyName", event.target.value);
@@ -1677,9 +1941,18 @@ export function ContractIntakeForm({
                 />
                 {renderPoAutoFillBadge("companyName")}
               </FormField>
+              ) : null}
 
+              {intakeLayout.isFieldVisible(
+                "counterparty_information",
+                "mainContactName",
+              ) ? (
               <FormField
-                label="Primary contact at counterparty"
+                label={intakeLayout.getFieldLabel(
+                  "counterparty_information",
+                  "mainContactName",
+                  "Primary contact at counterparty",
+                )}
                 htmlFor="mainContactPicker"
                 hint="Search your company directory for an internal contact. Counterparty email can still be entered below."
               >
@@ -1710,13 +1983,26 @@ export function ContractIntakeForm({
                     }
                   }}
                   disabled={isExistingCounterparty}
-                  required
+                  required={intakeLayout.isFieldRequired(
+                    "counterparty_information",
+                    "mainContactName",
+                    false,
+                  )}
                   placeholder="Search by name or email..."
                 />
               </FormField>
+              ) : null}
 
+              {intakeLayout.isFieldVisible(
+                "counterparty_information",
+                "mainContactTitle",
+              ) ? (
               <FormField
-                label="Main Contact Title"
+                label={intakeLayout.getFieldLabel(
+                  "counterparty_information",
+                  "mainContactTitle",
+                  "Main Contact Title",
+                )}
                 htmlFor="mainContactTitle"
                 hint="Optional."
               >
@@ -1737,13 +2023,29 @@ export function ContractIntakeForm({
                   }
                 />
               </FormField>
+              ) : null}
 
-              <FormField label="Main Contact Email" htmlFor="mainContactEmail">
+              {intakeLayout.isFieldVisible(
+                "counterparty_information",
+                "mainContactEmail",
+              ) ? (
+              <FormField
+                label={intakeLayout.getFieldLabel(
+                  "counterparty_information",
+                  "mainContactEmail",
+                  "Main Contact Email",
+                )}
+                htmlFor="mainContactEmail"
+              >
                 <input
                   id="mainContactEmail"
                   name="mainContactEmail"
                   type="email"
-                  required
+                  required={intakeLayout.isFieldRequired(
+                    "counterparty_information",
+                    "mainContactEmail",
+                    true,
+                  )}
                   readOnly={isExistingCounterparty}
                   placeholder="jane@acme.com"
                   value={form.mainContactEmail}
@@ -1757,9 +2059,18 @@ export function ContractIntakeForm({
                   }
                 />
               </FormField>
+              ) : null}
 
+              {intakeLayout.isFieldVisible(
+                "counterparty_information",
+                "mainContactPhone",
+              ) ? (
               <FormField
-                label="Main Contact Phone Number"
+                label={intakeLayout.getFieldLabel(
+                  "counterparty_information",
+                  "mainContactPhone",
+                  "Main Contact Phone Number",
+                )}
                 htmlFor="mainContactPhone"
                 hint="Optional."
               >
@@ -1780,14 +2091,27 @@ export function ContractIntakeForm({
                   }
                 />
               </FormField>
+              ) : null}
 
+              {intakeLayout.isFieldVisible("counterparty_information", "address") ? (
               <div className="md:col-span-2">
-                <FormField label="Address" htmlFor="address">
+                <FormField
+                  label={intakeLayout.getFieldLabel(
+                    "counterparty_information",
+                    "address",
+                    "Address",
+                  )}
+                  htmlFor="address"
+                >
                   <textarea
                     id="address"
                     name="address"
                     rows={3}
-                    required
+                    required={intakeLayout.isFieldRequired(
+                      "counterparty_information",
+                      "address",
+                      false,
+                    )}
                     readOnly={isExistingCounterparty}
                     placeholder="123 Market Street, San Francisco, CA 94105"
                     value={form.address}
@@ -1802,10 +2126,18 @@ export function ContractIntakeForm({
                   />
                 </FormField>
               </div>
+              ) : null}
             </>
           ) : null}
         </div>
       </section>
+      ) : null}
+
+      <CustomIntakeSections
+        sections={intakeLayout.customSections()}
+        values={customFieldValues}
+        onChange={handleCustomFieldChange}
+      />
 
       {selectedTemplate && !selectedTemplateId ? (
         <TemplateVariableForm

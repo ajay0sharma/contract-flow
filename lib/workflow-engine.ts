@@ -192,11 +192,16 @@ export function createContractFromIntake(
     companyProfileId: input.companyProfileId,
     templateId: input.templateId ?? null,
     templateVersion: input.templateVersion ?? null,
+    intakeFormId: input.intakeFormId ?? null,
     stage: stageForStep(workflowSteps[0]),
     workflowSteps,
     currentStepIndex: 0,
     attachments,
     relatedEmails: [],
+    contractVariables:
+      input.customFields && Object.keys(input.customFields).length > 0
+        ? input.customFields
+        : null,
     auditTrail,
     createdAt: timestamp,
     updatedAt: timestamp,

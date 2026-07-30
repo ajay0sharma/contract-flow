@@ -4,6 +4,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { AdminDashboardScrollManager } from "@/components/admin/AdminDashboardScrollManager";
 import { AdminSubmittedContractsTable } from "@/components/admin/AdminSubmittedContractsTable";
 import { ContractTypesAdminForm } from "@/components/admin/ContractTypesAdminForm";
+import { IntakeFormAdminForm } from "@/components/admin/IntakeFormAdminForm";
 import { CreateUserForm } from "@/components/admin/CreateUserForm";
 import { UserRoleTable } from "@/components/admin/UserRoleTable";
 import { WorkflowConfigForm } from "@/components/admin/WorkflowConfigForm";
@@ -21,6 +22,10 @@ import {
 } from "@/lib/contract-list-service";
 import { getPlatformUsers } from "@/lib/user-store";
 import { getWorkflowConfig } from "@/lib/workflow-store";
+import {
+  ensureDefaultIntakeForm,
+  getActiveIntakeForm,
+} from "@/lib/intake-form-store";
 
 export default async function AdminDashboardPage() {
   const user = await requireAdminPage();
@@ -36,6 +41,9 @@ export default async function AdminDashboardPage() {
   const workflow = getWorkflowConfig();
   const { policy, contractTypes, users, loadErrors } =
     await loadAdminDashboardData();
+  const intakeForm =
+    (await getActiveIntakeForm(organizationId)) ??
+    (await ensureDefaultIntakeForm(organizationId));
 
   const cards = [
     {
@@ -61,6 +69,12 @@ export default async function AdminDashboardPage() {
       value: contractTypes.filter((type) => type.isActive).length.toString(),
       href: adminDashboardSectionHref("contract-types"),
       detail: "Parent and child agreement setup",
+    },
+    {
+      title: "Intake form fields",
+      value: intakeForm.sections.length.toString(),
+      href: adminDashboardSectionHref("intake-form"),
+      detail: "Sections on the request form",
     },
     {
       title: "Workflow steps",
@@ -114,6 +128,14 @@ export default async function AdminDashboardPage() {
               className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
             >
               Manage contract types
+            </Link>
+          </li>
+          <li>
+            <Link
+              href={adminDashboardSectionHref("intake-form")}
+              className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
+            >
+              Configure intake form
             </Link>
           </li>
           <li>
@@ -176,6 +198,19 @@ export default async function AdminDashboardPage() {
           </p>
         </div>
         <ContractTypesAdminForm initialTypes={contractTypes} />
+      </section>
+
+      <section id="intake-form" className="mt-10 scroll-mt-20">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-stone-900">
+            Intake form builder
+          </h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Add, remove, and reorder sections and fields on the contract request
+            form submitted by general users.
+          </p>
+        </div>
+        <IntakeFormAdminForm initialForm={intakeForm} />
       </section>
 
       <section id="workflow-settings" className="mt-10 scroll-mt-20">

@@ -130,6 +130,8 @@ export interface ContractIntakeInput {
   attachments?: ContractIntakeAttachmentInput[];
   templateId?: string;
   templateVersion?: number;
+  intakeFormId?: string;
+  customFields?: Record<string, string>;
 }
 
 export interface ContractRecordUpdateInput {
@@ -185,6 +187,7 @@ export interface ContractRecord {
   companyProfileId: string;
   templateId: string | null;
   templateVersion: number | null;
+  intakeFormId?: string | null;
   stage: ContractStage;
   contractStatus?: ContractLifecycleStatus;
   expiryDate?: string | null;

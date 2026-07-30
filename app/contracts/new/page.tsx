@@ -11,6 +11,10 @@ import { listContractTypes } from "@/lib/contract-type-store";
 import { isAdminEmail, isLegalEmail, isSupportEmail } from "@/lib/legal-access";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import { getWorkflowConfig } from "@/lib/workflow-store";
+import {
+  ensureDefaultIntakeForm,
+  getActiveIntakeForm,
+} from "@/lib/intake-form-store";
 
 export default async function NewContractPage() {
   const user = await currentUser();
@@ -42,6 +46,7 @@ export default async function NewContractPage() {
   > = [];
   let intakeContractTypes: Awaited<ReturnType<typeof listContractTypes>> = [];
   let agreementTypeRules = workflowConfig.agreementTypeRules;
+  let intakeForm = await getActiveIntakeForm(organizationId);
 
   try {
     const [templates, allContractTypes] = await Promise.all([
@@ -57,8 +62,12 @@ export default async function NewContractPage() {
       allContractTypes,
       workflowConfig.agreementTypeRules,
     );
+    intakeForm =
+      intakeForm ?? (await ensureDefaultIntakeForm(organizationId));
   } catch (error) {
     console.error("Failed to load intake configuration:", error);
+    intakeForm =
+      intakeForm ?? (await ensureDefaultIntakeForm(organizationId));
   }
 
   const parentAgreementOptions = getActiveParentAgreementOptions(
@@ -75,6 +84,7 @@ export default async function NewContractPage() {
           parentAgreementOptions={parentAgreementOptions}
           contractTemplates={contractTemplates}
           intakeContractTypes={intakeContractTypes}
+          intakeFormLayout={intakeForm}
         />
     </PageShell>
   );
