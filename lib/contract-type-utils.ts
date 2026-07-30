@@ -27,18 +27,57 @@ export function isValidContractTypeSlug(value: string): boolean {
 }
 
 export function buildSystemContractTypeSeed(organizationId: string) {
-  return CONTRACT_TEMPLATE_TYPES.map((slug, index) => ({
-    organizationId,
-    slug,
-    label: CONTRACT_TEMPLATE_TYPE_LABELS[slug as SystemContractTemplateType],
-    description:
-      CONTRACT_TEMPLATE_TYPE_DESCRIPTIONS[slug as SystemContractTemplateType],
-    displayOrder: index,
-    isActive: true,
-    isSystem: true,
-    createdById: "system",
-  }));
+  return CONTRACT_TEMPLATE_TYPES.map((slug, index) => {
+    const agreementDefaults = getSystemContractTypeAgreementDefaults(
+      slug as SystemContractTemplateType,
+    );
+
+    return {
+      organizationId,
+      slug,
+      label: CONTRACT_TEMPLATE_TYPE_LABELS[slug as SystemContractTemplateType],
+      description:
+        CONTRACT_TEMPLATE_TYPE_DESCRIPTIONS[slug as SystemContractTemplateType],
+      displayOrder: index,
+      isActive: true,
+      isSystem: true,
+      createdById: "system",
+      canBeParentAgreement: agreementDefaults.canBeParentAgreement,
+      requiresParentAgreement: agreementDefaults.requiresParentAgreement,
+    };
+  });
 }
+
+export function getSystemContractTypeAgreementDefaults(
+  slug: SystemContractTemplateType,
+): {
+  canBeParentAgreement: boolean;
+  requiresParentAgreement: boolean;
+} {
+  return (
+    SYSTEM_CONTRACT_TYPE_AGREEMENT_DEFAULTS[slug] ?? {
+      canBeParentAgreement: false,
+      requiresParentAgreement: false,
+    }
+  );
+}
+
+export const SYSTEM_CONTRACT_TYPE_AGREEMENT_DEFAULTS: Record<
+  SystemContractTemplateType,
+  {
+    canBeParentAgreement: boolean;
+    requiresParentAgreement: boolean;
+  }
+> = {
+  vendor: { canBeParentAgreement: true, requiresParentAgreement: false },
+  customer: { canBeParentAgreement: true, requiresParentAgreement: false },
+  nda: { canBeParentAgreement: false, requiresParentAgreement: false },
+  employment: { canBeParentAgreement: false, requiresParentAgreement: false },
+  saas: { canBeParentAgreement: false, requiresParentAgreement: true },
+  consulting: { canBeParentAgreement: false, requiresParentAgreement: true },
+  partnership: { canBeParentAgreement: true, requiresParentAgreement: false },
+  other: { canBeParentAgreement: false, requiresParentAgreement: false },
+};
 
 export function makeUniqueContractTypeSlug(
   baseSlug: string,

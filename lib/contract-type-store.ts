@@ -57,7 +57,7 @@ function getMemoryStore(): ContractTypeRecord[] {
   if (!globalStore.__contractTypeStore) {
     const now = new Date().toISOString();
     globalStore.__contractTypeStore = buildSystemContractTypeSeed("default").map(
-      (seed, index) => ({
+      (seed) => ({
         id: `ctype-memory-${seed.slug}`,
         organizationId: seed.organizationId,
         slug: seed.slug,
@@ -67,8 +67,8 @@ function getMemoryStore(): ContractTypeRecord[] {
         isActive: seed.isActive,
         showInIntake: true,
         isSystem: seed.isSystem,
-        canBeParentAgreement: false,
-        requiresParentAgreement: false,
+        canBeParentAgreement: seed.canBeParentAgreement,
+        requiresParentAgreement: seed.requiresParentAgreement,
         createdById: seed.createdById,
         createdAt: now,
         updatedAt: now,
@@ -135,8 +135,6 @@ export async function ensureSystemContractTypes(
         data: {
           ...seed,
           showInIntake: true,
-          canBeParentAgreement: false,
-          requiresParentAgreement: false,
         },
       });
     }
