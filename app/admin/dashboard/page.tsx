@@ -13,20 +13,25 @@ import {
 } from "@/app/actions/admin";
 import { adminDashboardSectionHref } from "@/lib/admin-dashboard-sections";
 import { loadAdminDashboardData } from "@/lib/admin-dashboard-data";
-import { getAllContracts } from "@/lib/contract-store";
+import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import {
+  buildContractStatusCounts,
+  listMergedContractRecords,
+  sortContractRecords,
+} from "@/lib/contract-list-service";
 import { getPlatformUsers } from "@/lib/user-store";
 import { getWorkflowConfig } from "@/lib/workflow-store";
-import { isAwaitingApproval } from "@/lib/workflow-engine";
 
 export default async function AdminDashboardPage() {
   const user = await requireAdminPage();
   const displayName =
     user.fullName ?? user.firstName ?? user.username ?? "Administrator";
 
-  const contracts = getAllContracts();
-  const pendingApprovals = contracts.filter((contract) =>
-    isAwaitingApproval(contract),
-  ).length;
+  const organizationId = resolveClauseLibraryOrganizationId();
+  const allContracts = await listMergedContractRecords(organizationId);
+  const contracts = sortContractRecords(allContracts, "createdAt", "desc");
+  const contractCounts = buildContractStatusCounts(allContracts);
+  const pendingApprovals = contractCounts.draft + contractCounts.pending;
   const platformUsers = getPlatformUsers();
   const workflow = getWorkflowConfig();
   const { policy, contractTypes, users, loadErrors } =
