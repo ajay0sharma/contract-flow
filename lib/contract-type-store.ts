@@ -278,9 +278,23 @@ export async function updateContractType(
     });
 
     return { type: mapContractTypeRecord(updated) };
-  } catch {
-    return { error: "Unable to update contract type." };
+  } catch (error) {
+    return { error: getContractTypePersistenceError(error) };
   }
+}
+
+function getContractTypePersistenceError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (
+    /canBeParentAgreement|requiresParentAgreement|ContractTypeDefinition|column/.test(
+      message,
+    )
+  ) {
+    return "Contract type settings require a database update. Run `npx prisma migrate deploy`, then refresh.";
+  }
+
+  return "Unable to save contract type right now. Please try again.";
 }
 
 export async function createContractType(
@@ -338,9 +352,9 @@ export async function createContractType(
     return { type: created };
   }
 
-  await ensureSystemContractTypes(input.organizationId);
-
   try {
+    await ensureSystemContractTypes(input.organizationId);
+
     const prisma = getPrismaClient();
     const existing = await prisma.contractTypeDefinition.findMany({
       where: { organizationId: input.organizationId },
@@ -370,6 +384,7 @@ export async function createContractType(
         description: input.description?.trim() || null,
         displayOrder: nextOrder,
         isActive: true,
+        showInIntake: true,
         isSystem: false,
         canBeParentAgreement: input.canBeParentAgreement ?? false,
         requiresParentAgreement: input.requiresParentAgreement ?? false,
@@ -378,10 +393,9 @@ export async function createContractType(
     });
 
     return { type: mapContractTypeRecord(created) };
-  } catch {
+  } catch (error) {
     return {
-      error:
-        "Contract types database is not ready. Run `npx prisma migrate deploy` and restart the dev server.",
+      error: getContractTypePersistenceError(error),
     };
   }
 }

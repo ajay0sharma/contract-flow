@@ -1,15 +1,28 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import {
-  createAdminContractTypeAction,
-  deleteAdminContractTypeAction,
-  updateAdminContractTypeAction,
-} from "@/app/actions/admin";
 import type { ContractTypeRecord } from "@/types/contract-template";
 
 interface ContractTypesAdminFormProps {
   initialTypes: ContractTypeRecord[];
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    throw new Error("Empty response from server.");
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      text.startsWith("<")
+        ? "Unexpected HTML response from server. Try refreshing and signing in again."
+        : "Unexpected response from server.",
+    );
+  }
 }
 
 export function ContractTypesAdminForm({
@@ -50,19 +63,32 @@ export function ContractTypesAdminForm({
 
     startTransition(async () => {
       try {
-        const created = await createAdminContractTypeAction({
-          label,
-          description: newDescription.trim() || null,
-          canBeParentAgreement: newCanBeParent,
-          requiresParentAgreement: newRequiresParent,
+        const response = await fetch("/api/admin/contract-types", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            label,
+            description: newDescription.trim() || null,
+            canBeParentAgreement: newCanBeParent,
+            requiresParentAgreement: newRequiresParent,
+          }),
         });
 
-        setTypes((current) => [...current, created]);
+        const data = await readJsonResponse<{
+          contractType?: ContractTypeRecord;
+          error?: string;
+        }>(response);
+
+        if (!response.ok || !data.contractType) {
+          throw new Error(data.error ?? "Unable to create contract type.");
+        }
+
+        setTypes((current) => [...current, data.contractType!]);
         setNewLabel("");
         setNewDescription("");
         setNewCanBeParent(false);
         setNewRequiresParent(false);
-        setMessage(`Added contract type "${created.label}".`);
+        setMessage(`Added contract type "${data.contractType.label}".`);
       } catch (createError) {
         setError(
           createError instanceof Error
@@ -84,15 +110,27 @@ export function ContractTypesAdminForm({
 
     startTransition(async () => {
       try {
-        const updated = await updateAdminContractTypeAction({
-          id: type.id,
-          [field]: nextValue,
+        const response = await fetch(`/api/admin/contract-types/${type.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: nextValue }),
         });
 
+        const data = await readJsonResponse<{
+          contractType?: ContractTypeRecord;
+          error?: string;
+        }>(response);
+
+        if (!response.ok || !data.contractType) {
+          throw new Error(data.error ?? "Unable to update contract type.");
+        }
+
         setTypes((current) =>
-          current.map((entry) => (entry.id === updated.id ? updated : entry)),
+          current.map((entry) =>
+            entry.id === data.contractType!.id ? data.contractType! : entry,
+          ),
         );
-        setMessage(`Updated "${updated.label}".`);
+        setMessage(`Updated "${data.contractType.label}".`);
       } catch (updateError) {
         setError(
           updateError instanceof Error
@@ -119,18 +157,31 @@ export function ContractTypesAdminForm({
 
     startTransition(async () => {
       try {
-        const result = await deleteAdminContractTypeAction(type.id);
+        const response = await fetch(`/api/admin/contract-types/${type.id}`, {
+          method: "DELETE",
+        });
 
-        if (result.deleted) {
+        const data = await readJsonResponse<{
+          deleted?: boolean;
+          contractType?: ContractTypeRecord | null;
+          error?: string;
+        }>(response);
+
+        if (!response.ok) {
+          throw new Error(data.error ?? "Unable to delete contract type.");
+        }
+
+        if (data.deleted) {
           setTypes((current) => current.filter((entry) => entry.id !== type.id));
           setMessage(`Deleted "${type.label}".`);
           return;
         }
 
-        if (result.type) {
+        if (data.contractType) {
+          const updatedType = data.contractType;
           setTypes((current) =>
             current.map((entry) =>
-              entry.id === result.type?.id ? result.type : entry,
+              entry.id === updatedType.id ? updatedType : entry,
             ),
           );
           setMessage(
