@@ -28,9 +28,7 @@ import {
 } from "@/lib/intake-form-store";
 
 export default async function AdminDashboardPage() {
-  const user = await requireAdminPage();
-  const displayName =
-    user.fullName ?? user.firstName ?? user.username ?? "Administrator";
+  await requireAdminPage();
 
   const organizationId = resolveClauseLibraryOrganizationId();
   const allContracts = await listMergedContractRecords(organizationId);
@@ -160,6 +158,14 @@ export default async function AdminDashboardPage() {
               className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
             >
               Establish user tiers
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/admin/organization"
+              className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
+            >
+              Customize organization branding
             </Link>
           </li>
           <li>

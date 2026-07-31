@@ -6,10 +6,12 @@ import { PageShell } from "@/components/PageShell";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
 import { StageBadge } from "@/components/contracts/StageBadge";
 import { UploadContractAttachmentForm } from "@/components/contracts/UploadContractAttachmentForm";
+import { ContractRelatedEmails } from "@/components/contracts/ContractRelatedEmails";
 import { ContractObligationsCard } from "@/components/contracts/ContractObligationsCard";
 import { WorkflowTimeline } from "@/components/contracts/WorkflowTimeline";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
 import { useTier } from "@/components/providers/TierProvider";
+import { isSupportEmail } from "@/lib/access-control";
 import { getIntakeDocumentTypeLabel } from "@/lib/intake-documents";
 import {
   formatAuditTimestamp,
@@ -263,6 +265,8 @@ const PUBLIC_AUDIT_ACTIONS = new Set([
   "Moved to awaiting signature",
   "Executed",
   "Expired",
+  "Email sent",
+  "Email captured",
 ]);
 
 function formatFileSize(bytes: number): string {
@@ -1750,6 +1754,19 @@ export function ContractDetailClient({
           </div>
         )}
       </section>
+
+      <ContractRelatedEmails
+        contractId={contract.id}
+        recordNumber={contract.recordNumber}
+        emails={contract.relatedEmails ?? []}
+        senderEmail={userEmail}
+        defaultTo={contract.mainContactEmail?.trim() || ""}
+        canSendEmail={isPrivilegedUser && !isSupportEmail(userEmail)}
+        canAddEmail={!isSupportEmail(userEmail)}
+        onEmailUpdated={() => {
+          void loadContract();
+        }}
+      />
 
       {relationshipSection}
 

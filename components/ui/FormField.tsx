@@ -34,8 +34,6 @@ export function FormField({
 }
 
 export function useTierInputClassName(changed = false, hasError = false): string {
-  const { tokens } = useTier();
-
   if (hasError) {
     return "w-full px-3 py-2.5 text-sm border border-red-300 rounded-xl bg-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400/25 focus:border-transparent transition-colors disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed";
   }

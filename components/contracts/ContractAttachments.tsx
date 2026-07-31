@@ -33,6 +33,8 @@ function AttachmentPreview({ attachment }: { attachment: ContractAttachment }) {
 
   if (attachment.mimeType.startsWith("image/")) {
     return (
+      // Base64 data URLs are not compatible with next/image optimization.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={dataUrl}
         alt={attachment.title}

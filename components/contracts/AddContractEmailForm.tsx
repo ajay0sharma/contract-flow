@@ -19,6 +19,7 @@ import {
 
 interface AddContractEmailFormProps {
   contractId: string;
+  onSuccess?: () => void;
 }
 
 const emptyForm = {
@@ -85,7 +86,10 @@ function toDateTimeLocalValue(isoTimestamp: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function AddContractEmailForm({ contractId }: AddContractEmailFormProps) {
+export function AddContractEmailForm({
+  contractId,
+  onSuccess,
+}: AddContractEmailFormProps) {
   const router = useRouter();
   const [source, setSource] = useState<ContractEmailSource>("manual");
   const [form, setForm] = useState(emptyForm);
@@ -165,6 +169,7 @@ export function AddContractEmailForm({ contractId }: AddContractEmailFormProps) 
         setEmlFile(null);
         setSource("manual");
         setMessage("Email added to the contract record.");
+        onSuccess?.();
         router.refresh();
       } catch (submitError) {
         setError(

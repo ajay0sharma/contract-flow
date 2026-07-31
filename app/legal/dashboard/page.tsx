@@ -38,7 +38,6 @@ export default async function LegalDashboardPage({
       <div className="grid w-full min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0">
           <LegalDashboardClient
-            displayName={displayName}
             initialTab={initialTab}
             explicitView={explicitView}
           />

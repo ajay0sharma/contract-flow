@@ -19,7 +19,8 @@
     "db:studio": "prisma studio",
     "seed": "node --import tsx prisma/seed.ts",
     "test:flows": "node --import tsx scripts/test-contract-flows.ts",
-    "storage:ensure-templates-bucket": "npx tsx scripts/ensure-contract-templates-bucket.ts"
+    "storage:ensure-templates-bucket": "npx tsx scripts/ensure-contract-templates-bucket.ts",
+    "storage:ensure-branding-bucket": "npx tsx scripts/ensure-organization-branding-bucket.ts"
   },
   "prisma": {
     "seed": "node --import tsx prisma/seed.ts"

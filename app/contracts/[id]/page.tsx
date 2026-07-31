@@ -40,10 +40,7 @@ export default async function ContractPage({ params }: ContractPageProps) {
         <p className="mb-6 text-xs text-gray-500">
           Agreements linked to this contract record.
         </p>
-        <ContractRelationshipTree
-          data={relationshipData}
-          currentContractId={id}
-        />
+        <ContractRelationshipTree data={relationshipData} />
       </div>
     ) : null;
 

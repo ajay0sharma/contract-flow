@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   addContractAttachment,
-  addContractEmail,
   approveContract,
   assignContractLegalReviewer,
   canViewContractRecord,
@@ -17,7 +16,7 @@ import {
   submitContractIntake,
   updateContractRecordDetails,
 } from "@/lib/contract-store";
-import { assignLegalReviewerAndPersist } from "@/lib/contract-persistence";
+import { assignLegalReviewerAndPersist, addContractEmailAndPersist } from "@/lib/contract-persistence";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { isDatabaseConfigured } from "@/lib/prisma";
 import { createCounterparty } from "@/lib/counterparty-store";
@@ -456,7 +455,12 @@ export async function addContractEmailAction(
     }
   }
 
-  addContractEmail(contractId, input, actor.name, actor.email);
+  await addContractEmailAndPersist(
+    contractId,
+    resolveClauseLibraryOrganizationId(),
+    input,
+    { name: actor.name, email: actor.email },
+  );
 
   revalidatePath(`/contracts/${contractId}`);
   revalidatePath(`/contracts/${contractId}/review`);

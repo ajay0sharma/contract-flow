@@ -1,9 +1,16 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { Prisma } from "@/lib/generated/prisma/client";
-import { loadMergedContractRecord } from "@/lib/contract-list-service";
-import { getPrismaClient } from "@/lib/prisma";
+import { recordContractAuditLog } from "@/lib/audit-log";
 import {
-  activateContract,
+  findMatchingRelatedEmail,
+  hasMatchingRelatedEmail,
+  storeProviderMessageId,
+} from "@/lib/contract-email-dedup";
+import { sendContractRecordEmail } from "@/lib/contract-email-service";
+import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { appendRelatedEmailToRecord, addContractEmail } from "@/lib/contract-store";
+import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
+import {
   approveContractStep,
   createContractFromIntake,
   reassignCurrentApprovalStep,
@@ -12,12 +19,15 @@ import {
 } from "@/lib/workflow-engine";
 import type {
   AuditEvent,
+  AddContractEmailInput,
   ContractAttachment,
   ContractEmail,
   ContractIntakeInput,
   ContractLifecycleStatus,
   ContractRecord,
   ContractStage,
+  ContractEmailDirection,
+  SendContractEmailInput,
   WorkflowStep,
 } from "@/types/contract";
 
@@ -546,4 +556,243 @@ export async function markContractExpired(
   }
 
   return saved;
+}
+
+export interface InboundContractEmailInput {
+  recordNumber?: string;
+  subject: string;
+  from: string;
+  to: string;
+  cc?: string;
+  body: string;
+  sentAt?: string;
+  provider?: "microsoft" | "google" | "webhook";
+  providerMessageId?: string;
+  direction?: ContractEmailDirection;
+}
+
+export async function addContractEmailAndPersist(
+  contractId: string,
+  organizationId: string,
+  input: AddContractEmailInput,
+  actor: { name: string; email: string },
+): Promise<ContractRecord> {
+  const contract = await loadMergedContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const updated = appendRelatedEmailToRecord(
+    contract,
+    input,
+    actor.name,
+    actor.email,
+  );
+
+  if (isDatabaseConfigured()) {
+    await saveContractRecord(updated);
+    await recordContractAuditLog({
+      organizationId,
+      entityId: contractId,
+      action: "email_captured",
+      detail: input.subject.trim(),
+      actorEmail: actor.email,
+      actorName: actor.name,
+      metadata: {
+        source: input.source,
+        direction: "inbound",
+      },
+    });
+    return updated;
+  }
+
+  return addContractEmail(contractId, input, actor.name, actor.email);
+}
+
+export async function sendContractEmailAndPersist(
+  contractId: string,
+  organizationId: string,
+  input: SendContractEmailInput,
+  actor: { name: string; email: string },
+): Promise<ContractRecord> {
+  const contract = await loadMergedContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const sendResult = await sendContractRecordEmail(
+    contract,
+    input,
+    actor,
+    organizationId,
+  );
+  const timestamp = new Date().toISOString();
+  const emailInput = {
+    subject: sendResult.subject,
+    from: actor.email,
+    to: input.to.trim(),
+    cc: input.cc?.trim(),
+    sentAt: timestamp,
+    body: input.body.trim(),
+    source: "sent" as const,
+    direction: "outbound" as const,
+    provider:
+      sendResult.provider === "microsoft"
+        ? ("microsoft" as const)
+        : sendResult.provider === "webhook"
+          ? ("webhook" as const)
+          : undefined,
+    providerMessageId: storeProviderMessageId(sendResult.providerMessageId),
+  };
+
+  const updated = appendRelatedEmailToRecord(
+    contract,
+    emailInput,
+    actor.name,
+    actor.email,
+    "Email sent",
+  );
+
+  if (isDatabaseConfigured()) {
+    await saveContractRecord(updated);
+    await recordContractAuditLog({
+      organizationId,
+      entityId: contractId,
+      action: "email_sent",
+      detail: sendResult.subject,
+      actorEmail: actor.email,
+      actorName: actor.name,
+      metadata: {
+        to: input.to.trim(),
+        provider: sendResult.provider,
+        providerMessageId: sendResult.providerMessageId ?? null,
+      },
+    });
+    return updated;
+  }
+
+  return addContractEmail(contractId, emailInput, actor.name, actor.email, "Email sent");
+}
+
+export async function syncInboundContractEmailAndPersist(
+  organizationId: string,
+  input: InboundContractEmailInput,
+): Promise<{ contractId: string; emailId: string; duplicate: boolean } | null> {
+  const recordNumber = input.recordNumber?.trim().toUpperCase();
+
+  if (!recordNumber) {
+    return null;
+  }
+
+  const prisma = isDatabaseConfigured() ? getPrismaClient() : null;
+  let contract: ContractRecord | null = null;
+
+  if (prisma) {
+    const record = await prisma.contract.findFirst({
+      where: {
+        organizationId,
+        recordNumber: {
+          equals: recordNumber,
+          mode: "insensitive",
+        },
+      },
+    });
+    contract = record ? mapPrismaContractToRecord(record) : null;
+  } else {
+    contract = await loadMergedContractRecord(recordNumber, organizationId);
+  }
+
+  if (!contract) {
+    return null;
+  }
+
+  const sentAt = input.sentAt ?? new Date().toISOString();
+  const normalizedProviderMessageId = storeProviderMessageId(input.providerMessageId);
+
+  if (
+    hasMatchingRelatedEmail(contract.relatedEmails, {
+      subject: input.subject.trim(),
+      from: input.from.trim(),
+      to: input.to.trim(),
+      sentAt,
+      providerMessageId: normalizedProviderMessageId,
+    })
+  ) {
+    const existingEmail = findMatchingRelatedEmail(contract.relatedEmails, {
+      subject: input.subject.trim(),
+      from: input.from.trim(),
+      to: input.to.trim(),
+      sentAt,
+      providerMessageId: normalizedProviderMessageId,
+    });
+
+    return {
+      contractId: contract.id,
+      emailId: existingEmail?.id ?? "",
+      duplicate: true,
+    };
+  }
+
+  const actorEmail = "system@contractflow.app";
+  const actorName = "Email sync";
+  const direction = input.direction ?? "inbound";
+  const emailInput = {
+    subject: input.subject.trim(),
+    from: input.from.trim(),
+    to: input.to.trim(),
+    cc: input.cc?.trim(),
+    sentAt,
+    body: input.body.trim(),
+    source: "provider_sync" as const,
+    direction,
+    provider: input.provider,
+    providerMessageId: normalizedProviderMessageId,
+  };
+  const auditAction = direction === "outbound" ? "Email sent" : "Email captured";
+  const updated = appendRelatedEmailToRecord(
+    contract,
+    emailInput,
+    actorName,
+    actorEmail,
+    auditAction,
+  );
+  const capturedEmail = updated.relatedEmails.at(-1);
+
+  if (!capturedEmail) {
+    throw new Error("Failed to capture inbound email.");
+  }
+
+  if (isDatabaseConfigured()) {
+    await saveContractRecord(updated);
+    await recordContractAuditLog({
+      organizationId,
+      entityId: contract.id,
+      action: direction === "outbound" ? "email_sent" : "email_captured",
+      detail: input.subject.trim(),
+      actorEmail,
+      actorName,
+      metadata: {
+        source: emailInput.source,
+        provider: input.provider ?? null,
+        providerMessageId: normalizedProviderMessageId ?? null,
+        direction,
+      },
+    });
+  } else {
+    addContractEmail(
+      contract.id,
+      emailInput,
+      actorName,
+      actorEmail,
+      auditAction,
+    );
+  }
+
+  return {
+    contractId: contract.id,
+    emailId: capturedEmail.id,
+    duplicate: false,
+  };
 }

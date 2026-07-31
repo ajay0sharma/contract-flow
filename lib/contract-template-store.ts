@@ -9,7 +9,6 @@ import {
 } from "@/lib/contract-template-utils";
 import type {
   ContractTemplateRecord,
-  ContractTemplateType,
   ContractTemplateVersionRecord,
   CreateContractTemplateInput,
   TemplateDefaultChange,
@@ -432,7 +431,6 @@ function updateMemoryTemplate(
 
   const current = store[index];
   const fileChanged = Boolean(input.file);
-  const wasActive = current.isActive;
   const now = new Date().toISOString();
 
   if (fileChanged) {

@@ -1,12 +1,10 @@
+import {
+  dispatchContractEmailPayload,
+  type ContractEmailDispatchPayload,
+} from "@/lib/contract-email-service";
 import { getCurrentApprover } from "@/lib/workflow-engine";
 import { getWorkflowPolicy } from "@/lib/policy-store";
 import type { ContractRecord } from "@/types/contract";
-
-export interface ContractEmailPayload {
-  to: string;
-  subject: string;
-  body: string;
-}
 
 function buildContractUrl(contractId: string): string {
   const baseUrl =
@@ -17,17 +15,24 @@ function buildContractUrl(contractId: string): string {
   return `${baseUrl.replace(/\/$/, "")}/contracts/${contractId}`;
 }
 
-async function dispatchContractEmail(payload: ContractEmailPayload): Promise<void> {
-  console.info("[contract-email]", payload);
+async function dispatchContractEmail(payload: {
+  contract: ContractRecord;
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<void> {
+  const message: ContractEmailDispatchPayload = {
+    event: "contract_notification",
+    contractId: payload.contract.id,
+    recordNumber: payload.contract.recordNumber,
+    contractUrl: buildContractUrl(payload.contract.id),
+    from: "notifications@contractflow.app",
+    to: payload.to,
+    subject: payload.subject,
+    body: payload.body,
+  };
 
-  // Hook for a future provider (Resend, SendGrid, etc.).
-  if (process.env.CONTRACT_EMAIL_WEBHOOK_URL?.trim()) {
-    await fetch(process.env.CONTRACT_EMAIL_WEBHOOK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  }
+  await dispatchContractEmailPayload(message);
 }
 
 export async function sendContractApprovalNotification(
@@ -42,6 +47,7 @@ export async function sendContractApprovalNotification(
 
   if (nextApprover) {
     await dispatchContractEmail({
+      contract,
       to: nextApprover.assigneeEmail,
       subject: `Contract approval needed: ${contract.title}`,
       body: [
@@ -56,6 +62,7 @@ export async function sendContractApprovalNotification(
 
   if (["awaiting_signature", "active"].includes(contract.stage)) {
     await dispatchContractEmail({
+      contract,
       to: contract.requesterEmail,
       subject: `Contract approved: ${contract.title}`,
       body: [
@@ -78,6 +85,7 @@ export async function sendContractRejectionNotification(
   const contractUrl = buildContractUrl(contract.id);
 
   await dispatchContractEmail({
+    contract,
     to: contract.requesterEmail,
     subject: `Contract rejected: ${contract.title}`,
     body: [
@@ -109,6 +117,7 @@ export async function sendContractReassignmentNotification(
     previousAssigneeEmail.toLowerCase()
   ) {
     await dispatchContractEmail({
+      contract,
       to: currentApprover.assigneeEmail,
       subject: `Contract approval assigned to you: ${contract.title}`,
       body: [

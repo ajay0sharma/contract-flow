@@ -57,7 +57,7 @@ export function ContractTypeSelect({
     } finally {
       setLoading(false);
     }
-  }, [organizationId]);
+  }, [organizationId, onContractTypesChange]);
 
   useEffect(() => {
     if (initialContractTypes.length === 0) {

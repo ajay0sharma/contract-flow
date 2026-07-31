@@ -36,3 +36,18 @@ export const DEFAULT_ORGANIZATION_BRANDING: Pick<
 };
 
 export const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
+
+export const ORGANIZATION_BRANDING_LOGO_PATH = "/api/branding/logo";
+
+export function buildOrganizationBrandingLogoUrl(
+  logoStoragePath: string | null,
+  updatedAt?: string,
+): string | null {
+  if (!logoStoragePath) {
+    return null;
+  }
+
+  const cacheKey = updatedAt ? encodeURIComponent(updatedAt) : Date.now().toString();
+
+  return `${ORGANIZATION_BRANDING_LOGO_PATH}?v=${cacheKey}`;
+}

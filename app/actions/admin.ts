@@ -7,11 +7,10 @@ import { isAdminEmail } from "@/lib/access-control";
 import { getHomePathForEmail } from "@/lib/legal-access";
 import type { PlatformRole } from "@/lib/platform-config";
 import {
-  getPlatformUsers,
   upsertPlatformUser,
   updatePlatformUserRole,
 } from "@/lib/user-store";
-import { updateWorkflowPolicy, getWorkflowPolicy } from "@/lib/policy-store";
+import { updateWorkflowPolicy } from "@/lib/policy-store";
 import type { WorkflowConfig, WorkflowPolicy } from "@/lib/workflow-config-types";
 import { updateWorkflowConfig } from "@/lib/workflow-store";
 
@@ -98,30 +97,6 @@ export async function updateUserRoleAction(email: string, role: PlatformRole) {
   revalidatePath("/admin/users");
 }
 
-export async function listClerkUsersAction() {
-  await requireAdmin();
-
-  const client = await clerkClient();
-  const response = await client.users.getUserList({ limit: 100 });
-
-  const platformUsers = getPlatformUsers();
-
-  return response.data.map((user) => {
-    const email = user.primaryEmailAddress?.emailAddress ?? "";
-    const platformUser = platformUsers.find(
-      (entry) => entry.email.toLowerCase() === email.toLowerCase(),
-    );
-
-    return {
-      id: user.id,
-      email,
-      name: user.fullName ?? email,
-      role: platformUser?.role ?? "business",
-      createdAt: new Date(user.createdAt).toISOString(),
-    };
-  });
-}
-
 export async function requireAdminPage() {
   const user = await currentUser();
 
@@ -136,9 +111,4 @@ export async function requireAdminPage() {
   }
 
   return user;
-}
-
-export async function getAdminPolicyAction() {
-  await requireAdmin();
-  return getWorkflowPolicy();
 }

@@ -8,7 +8,7 @@ export default async function AdminOrganizationPage() {
   return (
     <AdminShell
       title="Organization branding"
-      description="Customize the header logo, platform name, tagline, and accent color for your organization."
+      description="Upload a custom logo and configure the platform name, tagline, and accent color for your organization."
     >
       <OrganizationBrandingClient />
     </AdminShell>

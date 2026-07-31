@@ -1,6 +1,5 @@
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
 import {
-  createOrganizationBrandingSignedUrl,
   deleteOrganizationBrandingLogo,
   uploadOrganizationBrandingLogo,
 } from "@/lib/supabase-storage";
@@ -9,7 +8,15 @@ import type {
   OrganizationBrandingView,
   UpdateOrganizationBrandingInput,
 } from "@/types/organization-branding";
-import { DEFAULT_ORGANIZATION_BRANDING, HEX_COLOR_PATTERN } from "@/types/organization-branding";
+import {
+  DEFAULT_ORGANIZATION_BRANDING,
+  HEX_COLOR_PATTERN,
+  buildOrganizationBrandingLogoUrl,
+} from "@/types/organization-branding";
+import {
+  isSupabaseStorageConfigured,
+  getSupabaseStorageSetupMessage,
+} from "@/lib/supabase-storage";
 
 const globalStore = globalThis as typeof globalThis & {
   __organizationBrandingStore?: Map<string, OrganizationBrandingRecord>;
@@ -80,20 +87,6 @@ function canUseBrandingDatabase(): boolean {
   }
 }
 
-async function resolveLogoUrl(
-  logoStoragePath: string | null,
-): Promise<string | null> {
-  if (!logoStoragePath) {
-    return null;
-  }
-
-  try {
-    return await createOrganizationBrandingSignedUrl(logoStoragePath);
-  } catch {
-    return null;
-  }
-}
-
 export async function toOrganizationBrandingView(
   record: OrganizationBrandingRecord,
 ): Promise<OrganizationBrandingView> {
@@ -102,7 +95,10 @@ export async function toOrganizationBrandingView(
     productName: record.productName,
     tagline: record.tagline,
     accentColor: record.accentColor,
-    logoUrl: await resolveLogoUrl(record.logoStoragePath),
+    logoUrl: buildOrganizationBrandingLogoUrl(
+      record.logoStoragePath,
+      record.updatedAt,
+    ),
     logoFileName: record.logoFileName,
   };
 }
@@ -226,16 +222,25 @@ export async function uploadOrganizationBrandingLogoFile(
   file: File,
   updatedById: string,
 ): Promise<{ branding?: OrganizationBrandingRecord; error?: string }> {
+  if (!isSupabaseStorageConfigured()) {
+    return {
+      error:
+        getSupabaseStorageSetupMessage() ||
+        "Image storage is not configured for this environment.",
+    };
+  }
+
   const allowedTypes = new Set([
     "image/png",
     "image/jpeg",
     "image/svg+xml",
     "image/webp",
+    "image/gif",
   ]);
 
   if (!allowedTypes.has(file.type)) {
     return {
-      error: "Logo must be a PNG, JPG, SVG, or WebP image.",
+      error: "Logo must be a PNG, JPG, SVG, WebP, or GIF image.",
     };
   }
 

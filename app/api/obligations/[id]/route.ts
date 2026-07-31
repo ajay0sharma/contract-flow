@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@/lib/generated/prisma/client";
-import type { ObligationStatus, ObligationType } from "@/lib/generated/prisma/enums";
+import type { ObligationStatus } from "@/lib/generated/prisma/enums";
 import { requireLegalOrAdminApiActor } from "@/lib/api-privileged-auth";
 import { writeAuditLog } from "@/lib/audit-log";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";

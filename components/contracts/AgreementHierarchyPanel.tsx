@@ -88,13 +88,13 @@ function TreeConnector({ length = "md" }: { length?: "sm" | "md" | "lg" }) {
   );
 }
 
-function ChildrenBranch({ children }: { children: ContractRecord[] }) {
+function ChildrenBranch({ childAgreements }: { childAgreements: ContractRecord[] }) {
   return (
     <div className="w-full">
       <TreeConnector length="lg" />
 
       <div className="relative mx-auto w-full max-w-6xl px-2">
-        {children.length > 1 ? (
+        {childAgreements.length > 1 ? (
           <div
             aria-hidden
             className="absolute left-8 right-8 top-0 hidden h-px bg-border sm:block"
@@ -102,9 +102,9 @@ function ChildrenBranch({ children }: { children: ContractRecord[] }) {
         ) : null}
 
         <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {children.map((child) => (
+          {childAgreements.map((child) => (
             <li key={child.id} className="relative flex flex-col pt-0 sm:pt-8">
-              {children.length > 1 ? (
+              {childAgreements.length > 1 ? (
                 <div
                   aria-hidden
                   className="absolute left-1/2 top-0 hidden h-8 w-px -translate-x-1/2 bg-border sm:block"
@@ -165,7 +165,7 @@ export function AgreementHierarchyPanel({
         </div>
 
         {hasChildren ? (
-          <ChildrenBranch children={childAgreements} />
+          <ChildrenBranch childAgreements={childAgreements} />
         ) : (
           <p className="mx-auto mt-8 max-w-xl rounded-lg border border-dashed border-border bg-surface-muted px-4 py-3 text-center text-sm text-text-secondary">
             No child agreements are linked to this record.

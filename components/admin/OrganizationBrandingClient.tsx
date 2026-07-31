@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useBranding } from "@/components/providers/BrandingProvider";
 import { inputClassName } from "@/components/ui/FormField";
 import type { OrganizationBrandingView } from "@/types/organization-branding";
 
+const ACCEPTED_LOGO_TYPES =
+  "image/png,image/jpeg,image/svg+xml,image/webp,image/gif";
+
 export function OrganizationBrandingClient() {
   const { refreshBranding } = useBranding();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [storageConfigured, setStorageConfigured] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [branding, setBranding] = useState<OrganizationBrandingView | null>(null);
@@ -17,11 +23,7 @@ export function OrganizationBrandingClient() {
   const [tagline, setTagline] = useState("");
   const [accentColor, setAccentColor] = useState("#3558A0");
 
-  useEffect(() => {
-    void loadBranding();
-  }, []);
-
-  async function loadBranding(): Promise<void> {
+  const loadBranding = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
 
@@ -32,8 +34,12 @@ export function OrganizationBrandingClient() {
         throw new Error("Failed to load organization branding.");
       }
 
-      const data = (await response.json()) as { branding: OrganizationBrandingView };
+      const data = (await response.json()) as {
+        branding: OrganizationBrandingView;
+        storageConfigured?: boolean;
+      };
       applyBranding(data.branding);
+      setStorageConfigured(data.storageConfigured ?? true);
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -43,7 +49,11 @@ export function OrganizationBrandingClient() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    void loadBranding();
+  }, [loadBranding]);
 
   function applyBranding(next: OrganizationBrandingView): void {
     setBranding(next);
@@ -114,7 +124,7 @@ export function OrganizationBrandingClient() {
       const data = (await response.json()) as { branding: OrganizationBrandingView };
       applyBranding(data.branding);
       await refreshBranding();
-      setSuccessMessage("Logo updated.");
+      setSuccessMessage("Logo uploaded.");
     } catch (uploadError) {
       setError(
         uploadError instanceof Error
@@ -160,6 +170,22 @@ export function OrganizationBrandingClient() {
     } finally {
       setUploadingLogo(false);
     }
+  }
+
+  function handleSelectedFile(file: File | null | undefined): void {
+    if (!file) {
+      return;
+    }
+
+    void handleLogoUpload(file);
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLDivElement>): void {
+    event.preventDefault();
+    setDragActive(false);
+
+    const file = event.dataTransfer.files?.[0];
+    handleSelectedFile(file);
   }
 
   if (loading) {
@@ -208,6 +234,18 @@ export function OrganizationBrandingClient() {
         </div>
       </section>
 
+      {!storageConfigured ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Image uploads require Supabase storage. Add{" "}
+          <code className="rounded bg-amber-100 px-1">SUPABASE_SERVICE_ROLE_KEY</code>{" "}
+          and a Supabase project URL to your environment, then run{" "}
+          <code className="rounded bg-amber-100 px-1">
+            npm run storage:ensure-branding-bucket
+          </code>
+          .
+        </div>
+      ) : null}
+
       {error ? (
         <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {error}
@@ -227,7 +265,101 @@ export function OrganizationBrandingClient() {
           the top header.
         </p>
 
-        <div className="mt-6 grid gap-5 md:grid-cols-2">
+        <div className="mt-6">
+          <h3 className="text-sm font-medium text-gray-700">Organization logo</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Upload PNG, JPG, SVG, WebP, or GIF images up to 2MB. Drag and drop
+            or choose a file.
+          </p>
+
+          <div
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+            }}
+            onDrop={handleDrop}
+            className={`mt-4 rounded-xl border-2 border-dashed p-6 transition ${
+              dragActive
+                ? "border-[#8C6A35] bg-[#FBF7F0]"
+                : "border-gray-200 bg-gray-50"
+            }`}
+          >
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+              <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-gray-200 bg-white">
+                {branding?.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={branding.logoUrl}
+                    alt="Uploaded organization logo"
+                    className="h-full w-full object-contain p-2"
+                  />
+                ) : (
+                  <span className="text-xs text-gray-400">No logo</span>
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1 text-center sm:text-left">
+                {branding?.logoFileName ? (
+                  <p className="truncate text-sm font-medium text-gray-900">
+                    {branding.logoFileName}
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    No logo uploaded yet.
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Recommended: square or horizontal logo on a transparent or
+                  white background.
+                </p>
+
+                <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingLogo || !storageConfigured}
+                    className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    {uploadingLogo ? "Uploading..." : "Choose image"}
+                  </button>
+
+                  {branding?.logoUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveLogo()}
+                      disabled={uploadingLogo}
+                      className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    >
+                      Remove logo
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_LOGO_TYPES}
+              className="hidden"
+              disabled={uploadingLogo || !storageConfigured}
+              onChange={(event) => {
+                handleSelectedFile(event.target.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-5 md:grid-cols-2">
           <div>
             <label htmlFor="productName" className="block text-sm font-medium text-gray-700">
               Platform name
@@ -285,43 +417,6 @@ export function OrganizationBrandingClient() {
           >
             {saving ? "Saving..." : "Save branding"}
           </button>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Logo</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Upload a square or horizontal logo (PNG, JPG, SVG, or WebP, max 2MB).
-        </p>
-
-        <div className="mt-5 flex flex-wrap items-center gap-4">
-          <label className="inline-flex cursor-pointer items-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-            {uploadingLogo ? "Uploading..." : "Upload logo"}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/svg+xml,image/webp"
-              className="hidden"
-              disabled={uploadingLogo}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void handleLogoUpload(file);
-                }
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-
-          {branding?.logoUrl ? (
-            <button
-              type="button"
-              onClick={() => void handleRemoveLogo()}
-              disabled={uploadingLogo}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-            >
-              Remove logo
-            </button>
-          ) : null}
         </div>
       </section>
     </div>

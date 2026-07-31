@@ -21,7 +21,7 @@ import {
   resolveContractRecordNumber,
 } from "@/lib/record-id";
 import type {
-  AddContractEmailInput,
+  AppendContractEmailInput,
   ContractAttachment,
   ContractEmail,
   ContractIntakeAttachmentInput,
@@ -51,8 +51,64 @@ function normalizeRelatedEmail(email: ContractEmail): ContractEmail {
   return {
     ...email,
     cc: email.cc ?? "",
+    direction: email.direction ?? "inbound",
     emlDataBase64: email.emlDataBase64 ?? "",
   };
+}
+
+function createRelatedEmail(
+  input: AppendContractEmailInput,
+  actorName: string,
+  actorEmail: string,
+): ContractEmail {
+  const timestamp = new Date().toISOString();
+
+  return normalizeRelatedEmail({
+    id: `email-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    subject: input.subject.trim(),
+    from: input.from.trim(),
+    to: input.to.trim(),
+    cc: input.cc?.trim() ?? "",
+    sentAt: input.sentAt,
+    body: input.body.trim(),
+    source: input.source,
+    direction: input.direction ?? "inbound",
+    provider: input.provider,
+    providerMessageId: input.providerMessageId,
+    addedByName: actorName,
+    addedByEmail: actorEmail,
+    addedAt: timestamp,
+    emlFileName: input.emlFileName,
+    emlDataBase64: input.emlDataBase64,
+  });
+}
+
+export function appendRelatedEmailToRecord(
+  contract: ContractRecord,
+  input: AppendContractEmailInput,
+  actorName: string,
+  actorEmail: string,
+  auditAction = "Email captured",
+): ContractRecord {
+  const timestamp = new Date().toISOString();
+  const email = createRelatedEmail(input, actorName, actorEmail);
+
+  return normalizeContractRecord({
+    ...contract,
+    relatedEmails: [...(contract.relatedEmails ?? []), email],
+    auditTrail: [
+      ...contract.auditTrail,
+      {
+        id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp,
+        actorName,
+        actorEmail,
+        action: auditAction,
+        detail: `${input.subject.trim()} (${input.source.replaceAll("_", " ")})`,
+      },
+    ],
+    updatedAt: timestamp,
+  });
 }
 
 export function normalizeContractRecord(
@@ -1221,9 +1277,10 @@ export function addContractAttachment(
 
 export function addContractEmail(
   contractId: string,
-  input: AddContractEmailInput,
+  input: AppendContractEmailInput,
   actorName: string,
   actorEmail: string,
+  auditAction = "Email captured",
 ): ContractRecord {
   const store = getStore();
   const index = store.findIndex((contract) => contract.id === contractId);
@@ -1232,40 +1289,13 @@ export function addContractEmail(
     throw new Error("Contract not found.");
   }
 
-  const timestamp = new Date().toISOString();
-  const email: ContractEmail = {
-    id: `email-${Date.now()}`,
-    subject: input.subject.trim(),
-    from: input.from.trim(),
-    to: input.to.trim(),
-    cc: input.cc?.trim() ?? "",
-    sentAt: input.sentAt,
-    body: input.body.trim(),
-    source: input.source,
-    addedByName: actorName,
-    addedByEmail: actorEmail,
-    addedAt: timestamp,
-    emlFileName: input.emlFileName,
-    emlDataBase64: input.emlDataBase64,
-  };
-
-  const contract = store[index];
-  const updated = normalizeContractRecord({
-    ...contract,
-    relatedEmails: [...(contract.relatedEmails ?? []), email],
-    auditTrail: [
-      ...contract.auditTrail,
-      {
-        id: `audit-${Date.now()}`,
-        timestamp,
-        actorName,
-        actorEmail,
-        action: "Email captured",
-        detail: `${input.subject.trim()} (${input.source.replace("_", " ")})`,
-      },
-    ],
-    updatedAt: timestamp,
-  });
+  const updated = appendRelatedEmailToRecord(
+    store[index],
+    input,
+    actorName,
+    actorEmail,
+    auditAction,
+  );
 
   store[index] = updated;
   return updated;

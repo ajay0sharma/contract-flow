@@ -219,7 +219,7 @@ export async function getObligationReportEntries(
 
 export async function runObligationScan(
   contract: ContractRecord,
-  actor: { email: string; name: string },
+  _actor: { email: string; name: string },
 ): Promise<ContractObligationView> {
   if (!isDatabaseConfigured()) {
     throw new Error(

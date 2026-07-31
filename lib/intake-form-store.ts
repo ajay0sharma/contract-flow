@@ -118,51 +118,6 @@ function getMemoryStore(): IntakeFormDefinitionRecord[] {
   return globalStore.__intakeFormStore;
 }
 
-function buildMemoryForm(organizationId: string): IntakeFormDefinitionRecord {
-  const now = new Date().toISOString();
-  const formId = `intake-form-memory-${organizationId}`;
-  const sections = buildDefaultIntakeFormSections().map((section, sectionIndex) => {
-    const sectionId = `${formId}-section-${section.key}`;
-
-    return {
-      id: sectionId,
-      formId,
-      key: section.key,
-      label: section.label,
-      description: section.description ?? null,
-      displayOrder: section.displayOrder ?? sectionIndex,
-      isSystem: section.isSystem ?? false,
-      createdAt: now,
-      updatedAt: now,
-      fields: section.fields.map((field, fieldIndex) => ({
-        id: `${sectionId}-field-${field.key}`,
-        sectionId,
-        key: field.key,
-        label: field.label,
-        fieldType: field.fieldType,
-        isRequired: field.isRequired ?? false,
-        isSystem: field.isSystem ?? false,
-        displayOrder: field.displayOrder ?? fieldIndex,
-        helpText: field.helpText ?? null,
-        placeholder: field.placeholder ?? null,
-        selectOptions: field.selectOptions ?? [],
-        createdAt: now,
-        updatedAt: now,
-      })),
-    } satisfies IntakeFormSectionRecord;
-  });
-
-  return {
-    id: formId,
-    organizationId,
-    name: "Default",
-    isActive: true,
-    sections,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
 function canUseIntakeFormDatabase(): boolean {
   if (!isDatabaseConfigured()) {
     return false;

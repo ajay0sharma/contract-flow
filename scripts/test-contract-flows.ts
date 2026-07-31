@@ -15,6 +15,15 @@ import {
   createAndPersistContract,
   assignLegalReviewerAndPersist,
 } from "@/lib/contract-persistence";
+import {
+  buildRelatedEmailFingerprint,
+  hasMatchingRelatedEmail,
+  normalizeEmailAddress,
+} from "@/lib/contract-email-dedup";
+import {
+  extractRecordNumberFromSubject,
+  formatContractEmailSubject,
+} from "@/lib/email-sources";
 import type { ContractIntakeInput } from "@/types/contract";
 import {
   approveContractStep,
@@ -168,6 +177,85 @@ function runWorkflowUnitTests(): void {
     "Pending queue sort prefers newest submission",
     sorted[0]?.createdAt.startsWith("2026-07-27") ?? false,
     sorted.map((item) => item.createdAt).join(", "),
+  );
+
+  assert(
+    "Contract email subject tags record number",
+    formatContractEmailSubject("CR-000042", "Updated terms") ===
+      "[CR-000042] Updated terms",
+    formatContractEmailSubject("CR-000042", "Updated terms"),
+  );
+
+  assert(
+    "Record number extracted from tagged subject",
+    extractRecordNumberFromSubject("[CR-000042] Updated terms") === "CR-000042",
+    extractRecordNumberFromSubject("[CR-000042] Updated terms") ?? "none",
+  );
+
+  const fingerprint = buildRelatedEmailFingerprint({
+    subject: "[CR-000042] Updated terms",
+    from: "legal@example.com",
+    to: "vendor@example.com",
+    sentAt: "2026-07-31T12:34:56.000Z",
+  });
+
+  assert(
+    "Duplicate provider email is skipped",
+    hasMatchingRelatedEmail(
+      [
+        {
+          id: "email-1",
+          subject: "[CR-000042] Updated terms",
+          from: "legal@example.com",
+          to: "vendor@example.com",
+          cc: "",
+          sentAt: "2026-07-31T12:34:50.000Z",
+          body: "Hello",
+          source: "sent",
+          direction: "outbound",
+          providerMessageId: fingerprint,
+          addedByName: "Legal User",
+          addedByEmail: "legal@example.com",
+          addedAt: "2026-07-31T12:34:56.000Z",
+        },
+      ],
+      {
+        subject: "[CR-000042] Updated terms",
+        from: "legal@example.com",
+        to: "vendor@example.com",
+        sentAt: "2026-07-31T12:34:56.000Z",
+      },
+    ),
+    fingerprint,
+  );
+
+  assert(
+    "Formatted Graph addresses dedupe against bare emails",
+    hasMatchingRelatedEmail(
+      [
+        {
+          id: "email-2",
+          subject: "[CR-000042] Updated terms",
+          from: "legal@example.com",
+          to: "vendor@example.com",
+          cc: "",
+          sentAt: "2026-07-31T12:34:50.000Z",
+          body: "Hello",
+          source: "sent",
+          direction: "outbound",
+          addedByName: "Legal User",
+          addedByEmail: "legal@example.com",
+          addedAt: "2026-07-31T12:34:56.000Z",
+        },
+      ],
+      {
+        subject: "[CR-000042] Updated terms",
+        from: "Legal User <legal@example.com>",
+        to: "Vendor Contact <vendor@example.com>",
+        sentAt: "2026-07-31T12:34:56.000Z",
+      },
+    ),
+    `${normalizeEmailAddress("Legal User <legal@example.com>")} matches bare email`,
   );
 }
 

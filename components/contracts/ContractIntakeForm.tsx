@@ -516,6 +516,8 @@ export function ContractIntakeForm({
         toVariableContext(form),
       ),
     );
+    // Sync template variables when intake field values change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- form is intentionally decomposed
   }, [
     selectedTemplate,
     selectedTemplateId,

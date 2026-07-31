@@ -75,7 +75,18 @@ export interface ContractIntakeAttachmentInput {
 export type ContractEmailSource =
   | "manual"
   | "outlook_export"
+  | "gmail_export"
+  | "sent"
+  | "provider_sync";
+
+export type CapturedContractEmailSource =
+  | "manual"
+  | "outlook_export"
   | "gmail_export";
+
+export type ContractEmailDirection = "inbound" | "outbound";
+
+export type ContractEmailProvider = "microsoft" | "google" | "webhook";
 
 export interface ContractEmail {
   id: string;
@@ -86,6 +97,9 @@ export interface ContractEmail {
   sentAt: string;
   body: string;
   source: ContractEmailSource;
+  direction?: ContractEmailDirection;
+  provider?: ContractEmailProvider;
+  providerMessageId?: string;
   addedByName: string;
   addedByEmail: string;
   addedAt: string;
@@ -100,9 +114,31 @@ export interface AddContractEmailInput {
   cc?: string;
   sentAt: string;
   body: string;
-  source: ContractEmailSource;
+  source: CapturedContractEmailSource;
   emlFileName?: string;
   emlDataBase64?: string;
+}
+
+export interface AppendContractEmailInput {
+  subject: string;
+  from: string;
+  to: string;
+  cc?: string;
+  sentAt: string;
+  body: string;
+  source: ContractEmailSource;
+  direction?: ContractEmailDirection;
+  provider?: ContractEmailProvider;
+  providerMessageId?: string;
+  emlFileName?: string;
+  emlDataBase64?: string;
+}
+
+export interface SendContractEmailInput {
+  to: string;
+  cc?: string;
+  subject: string;
+  body: string;
 }
 
 export interface ContractIntakeInput {

@@ -1,7 +1,4 @@
-import type {
-  IntakeFormFieldInput,
-  IntakeFormSectionInput,
-} from "@/types/intake-form";
+import type { IntakeFormSectionInput } from "@/types/intake-form";
 
 export const INTAKE_SYSTEM_SECTION_KEYS = [
   "company_configuration",

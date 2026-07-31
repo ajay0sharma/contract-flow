@@ -9,6 +9,7 @@ import {
   uploadOrganizationBrandingLogoFile,
 } from "@/lib/organization-branding-store";
 import { reportError } from "@/lib/error-reporting";
+import { isSupabaseStorageConfigured } from "@/lib/supabase-storage";
 
 export async function GET() {
   const auth = await requireAdminActor();
@@ -22,7 +23,11 @@ export async function GET() {
     const branding = await getOrganizationBranding(organizationId);
     const view = await toOrganizationBrandingView(branding);
 
-    return NextResponse.json({ branding: view, organizationId });
+    return NextResponse.json({
+      branding: view,
+      organizationId,
+      storageConfigured: isSupabaseStorageConfigured(),
+    });
   } catch (error) {
     reportError(error, { route: "GET /api/admin/branding" });
     return NextResponse.json(

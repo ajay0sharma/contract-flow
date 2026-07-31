@@ -185,7 +185,7 @@ export function TemplateEditor({
     if (mode === "edit" && initialTemplate) {
       setHistoryRefreshKey((current) => current + 1);
     }
-  }, [initialTemplate?.id, initialTemplate?.version, initialTemplate?.updatedAt, mode]);
+  }, [initialTemplate?.id, initialTemplate?.version, initialTemplate?.updatedAt, initialTemplate, mode]);
 
   if (!open) {
     return null;

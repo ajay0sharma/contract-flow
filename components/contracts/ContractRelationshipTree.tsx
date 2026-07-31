@@ -13,7 +13,6 @@ import type {
 
 interface ContractRelationshipTreeProps {
   data?: RelationshipTreeResponse | null;
-  currentContractId: string;
   isLoading?: boolean;
   error?: boolean;
 }
@@ -265,7 +264,6 @@ function LoadingSkeleton() {
 
 function currentNodeFromData(
   data: RelationshipTreeResponse,
-  currentContractId: string,
 ): RelationshipNode {
   return {
     id: data.currentContract.id,
@@ -283,7 +281,6 @@ function currentNodeFromData(
 
 export function ContractRelationshipTree({
   data,
-  currentContractId,
   isLoading = false,
   error = false,
 }: ContractRelationshipTreeProps) {
@@ -299,7 +296,7 @@ export function ContractRelationshipTree({
     );
   }
 
-  const currentNode = currentNodeFromData(data, currentContractId);
+  const currentNode = currentNodeFromData(data);
   const currentAndSiblings = [currentNode, ...data.siblings];
   const currentRowIndex = 0;
 

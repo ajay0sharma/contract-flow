@@ -16,7 +16,6 @@ import { getCurrentApprover, isAwaitingApproval } from "@/lib/workflow-engine";
 import type { ContractLifecycleStatus, ContractRecord } from "@/types/contract";
 
 interface LegalDashboardClientProps {
-  displayName: string;
   initialTab?: DashboardTab;
   explicitView?: boolean;
 }
@@ -268,7 +267,6 @@ async function fetchLegalContracts(
 }
 
 export function LegalDashboardClient({
-  displayName,
   initialTab = "pending",
   explicitView = false,
 }: LegalDashboardClientProps) {
