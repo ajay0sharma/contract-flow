@@ -55,9 +55,14 @@ export function ContractRelatedEmails({
             after the provider accepts the send.
           </li>
           <li>
-            Replies and other contract-tagged mail in legal inboxes are pulled
-            into the matching record every 15 minutes via Microsoft Graph when
-            directory integration is enabled.
+            Email settings are isolated per client organization. Each client uses
+            its own directory integration, mailbox list, outbound webhook URL, and
+            inbound webhook secret.
+          </li>
+          <li>
+            Replies and other contract-tagged mail are pulled into the matching
+            record on a schedule using only that client&apos;s configured legal
+            mailboxes.
           </li>
           <li>
             You can also export a message as <code>.eml</code> from Outlook or

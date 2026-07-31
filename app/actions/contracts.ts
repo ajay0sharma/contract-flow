@@ -17,6 +17,7 @@ import {
   updateContractRecordDetails,
 } from "@/lib/contract-store";
 import { assignLegalReviewerAndPersist, addContractEmailAndPersist } from "@/lib/contract-persistence";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { isDatabaseConfigured } from "@/lib/prisma";
 import { createCounterparty } from "@/lib/counterparty-store";
@@ -455,9 +456,15 @@ export async function addContractEmailAction(
     }
   }
 
+  const organizationId = await resolveContractOrganizationId(contractId);
+
+  if (!organizationId) {
+    throw new Error("Contract not found.");
+  }
+
   await addContractEmailAndPersist(
     contractId,
-    resolveClauseLibraryOrganizationId(),
+    organizationId,
     input,
     { name: actor.name, email: actor.email },
   );

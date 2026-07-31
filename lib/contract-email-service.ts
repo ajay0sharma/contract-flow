@@ -1,3 +1,4 @@
+import { resolveOutboundWebhookUrl } from "@/lib/organization-email-config";
 import { sendMicrosoftGraphMail } from "@/lib/contract-email-microsoft-mail";
 import { storeProviderMessageId } from "@/lib/contract-email-dedup";
 import { decryptCredentials } from "@/lib/po-integration";
@@ -8,6 +9,7 @@ import type { ContractRecord, SendContractEmailInput } from "@/types/contract";
 
 export interface ContractEmailDispatchPayload {
   event: "contract_email_send" | "contract_notification";
+  organizationId: string;
   contractId: string;
   recordNumber: string;
   contractUrl: string;
@@ -36,7 +38,7 @@ function buildContractUrl(contractId: string): string {
   return `${baseUrl.replace(/\/$/, "")}/contracts/${contractId}`;
 }
 
-function buildInboundSyncWebhookUrl(): string | undefined {
+function buildInboundSyncWebhookUrl(organizationId: string): string | undefined {
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL?.trim() ||
     process.env.APP_URL?.trim() ||
@@ -46,7 +48,9 @@ function buildInboundSyncWebhookUrl(): string | undefined {
     return undefined;
   }
 
-  return `${appUrl.replace(/\/$/, "")}/api/webhooks/contract-email`;
+  const base = `${appUrl.replace(/\/$/, "")}/api/webhooks/contract-email`;
+  const params = new URLSearchParams({ organizationId });
+  return `${base}?${params.toString()}`;
 }
 
 export async function dispatchContractEmailPayload(
@@ -54,7 +58,7 @@ export async function dispatchContractEmailPayload(
 ): Promise<void> {
   console.info("[contract-email]", payload);
 
-  const webhookUrl = process.env.CONTRACT_EMAIL_WEBHOOK_URL?.trim();
+  const webhookUrl = await resolveOutboundWebhookUrl(payload.organizationId);
 
   if (!webhookUrl) {
     return;
@@ -107,6 +111,7 @@ export async function sendContractRecordEmail(
   const contractUrl = buildContractUrl(contract.id);
   const payload: ContractEmailDispatchPayload = {
     event: "contract_email_send",
+    organizationId,
     contractId: contract.id,
     recordNumber: contract.recordNumber,
     contractUrl,
@@ -117,7 +122,7 @@ export async function sendContractRecordEmail(
     body: input.body.trim(),
     sentByEmail: actor.email,
     sentByName: actor.name,
-    syncWebhookUrl: buildInboundSyncWebhookUrl(),
+    syncWebhookUrl: buildInboundSyncWebhookUrl(organizationId),
   };
 
   const microsoftCredentials = await resolveMicrosoftCredentials(organizationId);
@@ -151,11 +156,11 @@ export async function sendContractRecordEmail(
     }
   }
 
-  const webhookUrl = process.env.CONTRACT_EMAIL_WEBHOOK_URL?.trim();
+  const webhookUrl = await resolveOutboundWebhookUrl(organizationId);
 
   if (!webhookUrl) {
     throw new Error(
-      "No email provider is configured. Enable Microsoft directory integration with Mail.Send or set CONTRACT_EMAIL_WEBHOOK_URL.",
+      "No email provider is configured for this client. Configure Microsoft directory integration or a client-specific outbound webhook URL.",
     );
   }
 

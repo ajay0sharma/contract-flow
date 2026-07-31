@@ -1,6 +1,6 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { sendContractEmailAndPersist } from "@/lib/contract-persistence";
 import { reportError } from "@/lib/error-reporting";
 import { isAdminEmail, isLegalEmail } from "@/lib/legal-access";
@@ -40,6 +40,12 @@ export async function POST(
   const { id } = await context.params;
 
   try {
+    const organizationId = await resolveContractOrganizationId(id);
+
+    if (!organizationId) {
+      return NextResponse.json({ error: "Contract not found." }, { status: 404 });
+    }
+
     const body = (await request.json()) as SendEmailBody;
     const to = body.to?.trim() ?? "";
     const subject = body.subject?.trim() ?? "";
@@ -52,7 +58,6 @@ export async function POST(
       );
     }
 
-    const organizationId = resolveClauseLibraryOrganizationId();
     const updated = await sendContractEmailAndPersist(
       id,
       organizationId,
@@ -72,6 +77,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
+      organizationId,
       email: sentEmail ?? null,
     });
   } catch (error) {

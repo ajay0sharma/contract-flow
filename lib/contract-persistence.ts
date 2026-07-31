@@ -1,6 +1,8 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { recordContractAuditLog } from "@/lib/audit-log";
+import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { resolveOrganizationIdByRecordNumber } from "@/lib/contract-email-org";
 import {
   findMatchingRelatedEmail,
   hasMatchingRelatedEmail,
@@ -583,6 +585,13 @@ export async function addContractEmailAndPersist(
     throw new Error("Contract not found.");
   }
 
+  if (
+    resolveClauseLibraryOrganizationId(contract.companyProfileId) !==
+    resolveClauseLibraryOrganizationId(organizationId)
+  ) {
+    throw new Error("Contract does not belong to this client organization.");
+  }
+
   const updated = appendRelatedEmailToRecord(
     contract,
     input,
@@ -620,6 +629,13 @@ export async function sendContractEmailAndPersist(
 
   if (!contract) {
     throw new Error("Contract not found.");
+  }
+
+  if (
+    resolveClauseLibraryOrganizationId(contract.companyProfileId) !==
+    resolveClauseLibraryOrganizationId(organizationId)
+  ) {
+    throw new Error("Contract does not belong to this client organization.");
   }
 
   const sendResult = await sendContractRecordEmail(
@@ -686,23 +702,21 @@ export async function syncInboundContractEmailAndPersist(
     return null;
   }
 
-  const prisma = isDatabaseConfigured() ? getPrismaClient() : null;
-  let contract: ContractRecord | null = null;
+  const resolvedOrganizationId = resolveClauseLibraryOrganizationId(organizationId);
+  const located = await resolveOrganizationIdByRecordNumber(recordNumber);
 
-  if (prisma) {
-    const record = await prisma.contract.findFirst({
-      where: {
-        organizationId,
-        recordNumber: {
-          equals: recordNumber,
-          mode: "insensitive",
-        },
-      },
-    });
-    contract = record ? mapPrismaContractToRecord(record) : null;
-  } else {
-    contract = await loadMergedContractRecord(recordNumber, organizationId);
+  if (!located) {
+    return null;
   }
+
+  if (located.organizationId !== resolvedOrganizationId) {
+    throw new Error("Contract record does not belong to this client organization.");
+  }
+
+  const contract = await loadMergedContractRecord(
+    located.contractId,
+    located.organizationId,
+  );
 
   if (!contract) {
     return null;
@@ -767,7 +781,7 @@ export async function syncInboundContractEmailAndPersist(
   if (isDatabaseConfigured()) {
     await saveContractRecord(updated);
     await recordContractAuditLog({
-      organizationId,
+      organizationId: located.organizationId,
       entityId: contract.id,
       action: direction === "outbound" ? "email_sent" : "email_captured",
       detail: input.subject.trim(),

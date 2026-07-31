@@ -1,4 +1,3 @@
-import { getLegalTeamEmails } from "@/lib/access-control";
 import { storeProviderMessageId } from "@/lib/contract-email-dedup";
 import {
   fetchMicrosoftContractEmails,
@@ -8,29 +7,27 @@ import {
   syncInboundContractEmailAndPersist,
   type InboundContractEmailInput,
 } from "@/lib/contract-persistence";
-import { decryptCredentials } from "@/lib/po-integration";
 import { getDirectoryConfig } from "@/lib/directory-sync";
 import type { MicrosoftCredentials } from "@/lib/directory-microsoft";
 import { extractRecordNumberFromSubject } from "@/lib/email-sources";
+import {
+  getLegalMailboxEmailsForOrganization,
+  getOrganizationEmailConfig,
+  isOrganizationEmailSyncEnabled,
+  listOrganizationsWithEmailSyncEnabled,
+  recordOrganizationEmailSyncResult,
+} from "@/lib/organization-email-config";
+import { decryptCredentials } from "@/lib/po-integration";
 import { isDatabaseConfigured } from "@/lib/prisma";
 
 export interface ContractEmailSyncResult {
+  organizationId: string;
   success: boolean;
   mailboxesChecked: number;
   messagesScanned: number;
   messagesCaptured: number;
   duplicatesSkipped: number;
   errors: string[];
-}
-
-function isEmailSyncEnabled(): boolean {
-  const flag = process.env.CONTRACT_EMAIL_SYNC_ENABLED?.trim().toLowerCase();
-
-  if (flag === "false" || flag === "0") {
-    return false;
-  }
-
-  return true;
 }
 
 async function resolveMicrosoftCredentials(
@@ -79,6 +76,7 @@ export async function syncContractEmailsForOrganization(
   organizationId: string,
 ): Promise<ContractEmailSyncResult> {
   const result: ContractEmailSyncResult = {
+    organizationId,
     success: true,
     mailboxesChecked: 0,
     messagesScanned: 0,
@@ -87,8 +85,10 @@ export async function syncContractEmailsForOrganization(
     errors: [],
   };
 
-  if (!isEmailSyncEnabled()) {
-    result.errors.push("Contract email sync is disabled.");
+  const emailConfig = await getOrganizationEmailConfig(organizationId);
+
+  if (!isOrganizationEmailSyncEnabled(emailConfig)) {
+    result.errors.push("Contract email sync is disabled for this client.");
     result.success = false;
     return result;
   }
@@ -103,16 +103,18 @@ export async function syncContractEmailsForOrganization(
 
   if (!credentials) {
     result.errors.push(
-      "Microsoft directory integration is not configured for mailbox sync.",
+      "Microsoft directory integration is not configured for this client.",
     );
     result.success = false;
     return result;
   }
 
-  const mailboxEmails = getLegalTeamEmails();
+  const mailboxEmails = await getLegalMailboxEmailsForOrganization(organizationId);
 
   if (mailboxEmails.length === 0) {
-    result.errors.push("No legal team mailboxes are configured to sync.");
+    result.errors.push(
+      "No legal mailboxes are configured for this client. Add mailbox emails in client email settings or sync Legal department users from directory.",
+    );
     result.success = false;
     return result;
   }
@@ -154,5 +156,29 @@ export async function syncContractEmailsForOrganization(
     }
   }
 
+  await recordOrganizationEmailSyncResult(organizationId, {
+    success: result.success,
+    error: result.errors.join(" ") || null,
+  });
+
   return result;
+}
+
+export async function syncContractEmailsForAllOrganizations(): Promise<{
+  checked: number;
+  synced: number;
+  results: ContractEmailSyncResult[];
+}> {
+  const organizationIds = await listOrganizationsWithEmailSyncEnabled();
+  const results: ContractEmailSyncResult[] = [];
+
+  for (const organizationId of organizationIds) {
+    results.push(await syncContractEmailsForOrganization(organizationId));
+  }
+
+  return {
+    checked: organizationIds.length,
+    synced: results.filter((result) => result.success).length,
+    results,
+  };
 }

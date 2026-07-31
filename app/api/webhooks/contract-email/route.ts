@@ -1,13 +1,18 @@
-import { NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  resolveOrganizationIdByRecordNumber,
+  resolveRequestedOrganizationId,
+} from "@/lib/contract-email-org";
 import {
   syncInboundContractEmailAndPersist,
   type InboundContractEmailInput,
 } from "@/lib/contract-persistence";
 import { extractRecordNumberFromSubject } from "@/lib/email-sources";
+import { isOrganizationWebhookAuthorized } from "@/lib/organization-email-config";
 import { reportError } from "@/lib/error-reporting";
 
 interface InboundWebhookBody {
+  organizationId?: string;
   recordNumber?: string;
   subject?: string;
   from?: string;
@@ -20,29 +25,22 @@ interface InboundWebhookBody {
   direction?: "inbound" | "outbound";
 }
 
-function isAuthorized(request: Request): boolean {
-  const configuredSecret =
-    process.env.CONTRACT_EMAIL_WEBHOOK_SECRET?.trim() ||
-    process.env.CRON_SECRET?.trim();
+function resolveOrganizationIdFromRequest(
+  request: NextRequest,
+  body: InboundWebhookBody,
+): string | null {
+  const fromQuery = request.nextUrl.searchParams.get("organizationId");
+  const fromBody = body.organizationId;
+  const requested = fromBody ?? fromQuery;
 
-  if (!configuredSecret) {
-    return false;
+  if (requested?.trim()) {
+    return resolveRequestedOrganizationId(requested);
   }
 
-  const authorization = request.headers.get("authorization")?.trim() ?? "";
-  const bearerToken = authorization.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length).trim()
-    : "";
-  const headerSecret = request.headers.get("x-contract-email-secret")?.trim() ?? "";
-
-  return bearerToken === configuredSecret || headerSecret === configuredSecret;
+  return null;
 }
 
-export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
+export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as InboundWebhookBody;
     const subject = body.subject?.trim() ?? "";
@@ -71,6 +69,32 @@ export async function POST(request: Request) {
       );
     }
 
+    const located = await resolveOrganizationIdByRecordNumber(recordNumber);
+
+    if (!located) {
+      return NextResponse.json(
+        { error: "Contract record not found." },
+        { status: 404 },
+      );
+    }
+
+    const requestedOrganizationId = resolveOrganizationIdFromRequest(
+      request,
+      body,
+    );
+    const organizationId = requestedOrganizationId ?? located.organizationId;
+
+    if (organizationId !== located.organizationId) {
+      return NextResponse.json(
+        { error: "Contract record does not belong to this client organization." },
+        { status: 403 },
+      );
+    }
+
+    if (!(await isOrganizationWebhookAuthorized(organizationId, request))) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
     const input: InboundContractEmailInput = {
       recordNumber,
       subject,
@@ -84,7 +108,6 @@ export async function POST(request: Request) {
       direction: body.direction,
     };
 
-    const organizationId = resolveClauseLibraryOrganizationId();
     const result = await syncInboundContractEmailAndPersist(organizationId, input);
 
     if (!result) {
@@ -96,6 +119,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
+      organizationId,
       contractId: result.contractId,
       emailId: result.emailId,
       duplicate: result.duplicate,
