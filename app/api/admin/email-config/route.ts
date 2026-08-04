@@ -79,7 +79,9 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const organizationId = resolveRequestedOrganizationId(body.organizationId);
+    const organizationId = resolveRequestedOrganizationId(
+      body.organizationId ?? request.nextUrl.searchParams.get("organizationId"),
+    );
     const updated = await upsertOrganizationEmailConfig(organizationId, {
       syncEnabled: body.syncEnabled,
       outboundWebhookUrl: body.outboundWebhookUrl,

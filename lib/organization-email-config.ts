@@ -1,7 +1,8 @@
-import { getAllowedOrganizationIds } from "@/lib/clause-library-org";
+import { getAllowedOrganizationIds, resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { getDirectoryConfig } from "@/lib/directory-sync";
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
 import { decryptCredentials, encryptCredentials } from "@/lib/po-integration";
+import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 
 export interface OrganizationEmailConfigRecord {
   organizationId: string;
@@ -52,6 +53,21 @@ function parseMailboxEmails(value: unknown): string[] {
   return value
     .map((entry) => String(entry).trim().toLowerCase())
     .filter(Boolean);
+}
+
+function isValidEmailAddress(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizeMailboxEmails(emails: string[]): string[] {
+  const normalized = emails.map((email) => email.trim().toLowerCase()).filter(Boolean);
+  const invalid = normalized.filter((email) => !isValidEmailAddress(email));
+
+  if (invalid.length > 0) {
+    throw new Error(`Invalid mailbox email address: ${invalid[0]}`);
+  }
+
+  return [...new Set(normalized)];
 }
 
 function buildDefaultConfig(organizationId: string): OrganizationEmailConfigRecord {
@@ -109,8 +125,9 @@ export async function upsertOrganizationEmailConfig(
 ): Promise<OrganizationEmailConfigRecord> {
   const current = await getOrganizationEmailConfig(organizationId);
   const nextMailboxEmails =
-    input.mailboxEmails?.map((email) => email.trim().toLowerCase()).filter(Boolean) ??
-    current.mailboxEmails;
+    input.mailboxEmails !== undefined
+      ? normalizeMailboxEmails(input.mailboxEmails)
+      : current.mailboxEmails;
   const nextOutboundWebhookUrl =
     input.outboundWebhookUrl === undefined
       ? current.outboundWebhookUrl
@@ -174,7 +191,8 @@ export async function upsertOrganizationEmailConfig(
 export async function resolveOutboundWebhookUrl(
   organizationId: string,
 ): Promise<string | null> {
-  const config = await getOrganizationEmailConfig(organizationId);
+  const scopedOrganizationId = resolveClauseLibraryOrganizationId(organizationId);
+  const config = await getOrganizationEmailConfig(scopedOrganizationId);
   const orgUrl = config.outboundWebhookUrl?.trim();
 
   if (orgUrl) {
@@ -182,13 +200,23 @@ export async function resolveOutboundWebhookUrl(
   }
 
   const globalUrl = process.env.CONTRACT_EMAIL_WEBHOOK_URL?.trim();
-  return globalUrl || null;
+
+  if (!globalUrl) {
+    return null;
+  }
+
+  if (scopedOrganizationId === DEFAULT_ORGANIZATION_ID) {
+    return globalUrl;
+  }
+
+  return null;
 }
 
 export async function isOrganizationWebhookAuthorized(
   organizationId: string,
   request: Request,
 ): Promise<boolean> {
+  const scopedOrganizationId = resolveClauseLibraryOrganizationId(organizationId);
   const authorization = request.headers.get("authorization")?.trim() ?? "";
   const bearerToken = authorization.startsWith("Bearer ")
     ? authorization.slice("Bearer ".length).trim()
@@ -204,7 +232,7 @@ export async function isOrganizationWebhookAuthorized(
     try {
       const prisma = getPrismaClient();
       const record = await prisma.organizationEmailConfig.findUnique({
-        where: { organizationId },
+        where: { organizationId: scopedOrganizationId },
         select: { encryptedWebhookSecret: true },
       });
 
@@ -215,13 +243,15 @@ export async function isOrganizationWebhookAuthorized(
         >;
         const orgSecret = credentials.secret?.trim();
 
-        if (orgSecret && orgSecret === providedSecret) {
-          return true;
-        }
+        return Boolean(orgSecret && orgSecret === providedSecret);
       }
     } catch {
-      // Fall through to global secrets.
+      return false;
     }
+  }
+
+  if (scopedOrganizationId !== DEFAULT_ORGANIZATION_ID) {
+    return false;
   }
 
   const configuredSecret =

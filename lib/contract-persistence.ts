@@ -602,7 +602,7 @@ export async function addContractEmailAndPersist(
   if (isDatabaseConfigured()) {
     await saveContractRecord(updated);
     await recordContractAuditLog({
-      organizationId,
+      organizationId: resolveClauseLibraryOrganizationId(contract.companyProfileId),
       entityId: contractId,
       action: "email_captured",
       detail: input.subject.trim(),
@@ -674,7 +674,7 @@ export async function sendContractEmailAndPersist(
   if (isDatabaseConfigured()) {
     await saveContractRecord(updated);
     await recordContractAuditLog({
-      organizationId,
+      organizationId: resolveClauseLibraryOrganizationId(contract.companyProfileId),
       entityId: contractId,
       action: "email_sent",
       detail: sendResult.subject,

@@ -24,6 +24,11 @@ import {
   extractRecordNumberFromSubject,
   formatContractEmailSubject,
 } from "@/lib/email-sources";
+import {
+  isOrganizationWebhookAuthorized,
+  resolveOutboundWebhookUrl,
+  upsertOrganizationEmailConfig,
+} from "@/lib/organization-email-config";
 import type { ContractIntakeInput } from "@/types/contract";
 import {
   approveContractStep,
@@ -259,6 +264,84 @@ function runWorkflowUnitTests(): void {
   );
 }
 
+function makeWebhookRequest(secret: string): Request {
+  return new Request("http://localhost/api/webhooks/contract-email", {
+    headers: {
+      "x-contract-email-secret": secret,
+    },
+  });
+}
+
+async function runEmailConfigUnitTests(): Promise<void> {
+  const previousWebhookUrl = process.env.CONTRACT_EMAIL_WEBHOOK_URL;
+  const previousWebhookSecret = process.env.CONTRACT_EMAIL_WEBHOOK_SECRET;
+  const previousCronSecret = process.env.CRON_SECRET;
+
+  process.env.CONTRACT_EMAIL_WEBHOOK_URL = "https://example.com/global-email-hook";
+  process.env.CONTRACT_EMAIL_WEBHOOK_SECRET = "global-webhook-secret";
+  delete process.env.CRON_SECRET;
+
+  const defaultWebhookUrl = await resolveOutboundWebhookUrl("default");
+  const acmeWebhookUrl = await resolveOutboundWebhookUrl("acme");
+
+  assert(
+    "Global outbound webhook applies only to default client",
+    defaultWebhookUrl === "https://example.com/global-email-hook" &&
+      acmeWebhookUrl === null,
+    `default=${defaultWebhookUrl ?? "none"}, acme=${acmeWebhookUrl ?? "none"}`,
+  );
+
+  const defaultAuthorized = await isOrganizationWebhookAuthorized(
+    "default",
+    makeWebhookRequest("global-webhook-secret"),
+  );
+  const acmeAuthorized = await isOrganizationWebhookAuthorized(
+    "acme",
+    makeWebhookRequest("global-webhook-secret"),
+  );
+
+  assert(
+    "Global inbound webhook secret applies only to default client",
+    defaultAuthorized && !acmeAuthorized,
+    `default=${defaultAuthorized}, acme=${acmeAuthorized}`,
+  );
+
+  let rejectedInvalidMailbox = false;
+
+  try {
+    await upsertOrganizationEmailConfig("default", {
+      mailboxEmails: ["not-an-email"],
+    });
+  } catch (error) {
+    rejectedInvalidMailbox =
+      error instanceof Error && error.message.includes("Invalid mailbox email");
+  }
+
+  assert(
+    "Invalid mailbox emails are rejected",
+    rejectedInvalidMailbox,
+    rejectedInvalidMailbox ? "validation error thrown" : "accepted invalid email",
+  );
+
+  if (previousWebhookUrl === undefined) {
+    delete process.env.CONTRACT_EMAIL_WEBHOOK_URL;
+  } else {
+    process.env.CONTRACT_EMAIL_WEBHOOK_URL = previousWebhookUrl;
+  }
+
+  if (previousWebhookSecret === undefined) {
+    delete process.env.CONTRACT_EMAIL_WEBHOOK_SECRET;
+  } else {
+    process.env.CONTRACT_EMAIL_WEBHOOK_SECRET = previousWebhookSecret;
+  }
+
+  if (previousCronSecret === undefined) {
+    delete process.env.CRON_SECRET;
+  } else {
+    process.env.CRON_SECRET = previousCronSecret;
+  }
+}
+
 async function runDatabaseIntegrationTests(): Promise<void> {
   if (!isDatabaseConfigured()) {
     pass(
@@ -356,6 +439,7 @@ async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
   runWorkflowUnitTests();
+  await runEmailConfigUnitTests();
   await runDatabaseIntegrationTests();
 
   const failed = results.filter((result) => !result.passed);

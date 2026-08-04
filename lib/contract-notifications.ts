@@ -1,3 +1,4 @@
+import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import {
   dispatchContractEmailPayload,
   type ContractEmailDispatchPayload,
@@ -23,7 +24,9 @@ async function dispatchContractEmail(payload: {
 }): Promise<void> {
   const message: ContractEmailDispatchPayload = {
     event: "contract_notification",
-    organizationId: payload.contract.companyProfileId,
+    organizationId: resolveClauseLibraryOrganizationId(
+      payload.contract.companyProfileId,
+    ),
     contractId: payload.contract.id,
     recordNumber: payload.contract.recordNumber,
     contractUrl: buildContractUrl(payload.contract.id),
