@@ -33,7 +33,7 @@ git push -u origin main
 2. Import the GitHub repository
 3. Framework preset: **Next.js** (auto-detected)
 4. Root directory: `.` (default)
-5. Build command: uses `vercel.json` → `npm run build:deploy` (`prisma migrate deploy && next build`)
+5. Build command: uses `vercel.json` → `npm run build` (run `npm run build:deploy` locally or in CI when applying migrations)
 
 ### 3. Environment variables
 
