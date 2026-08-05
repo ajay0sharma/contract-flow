@@ -4,8 +4,8 @@ import {
   getAccessibleOrganizationIds,
   listAccessibleOrganizations,
   requireOrganizationAccess,
-  type AccessibleOrganization,
 } from "@/lib/organization-membership";
+import type { AccessibleOrganization } from "@/lib/organization-membership";
 import { getAllowedOrganizationIds } from "@/lib/clause-library-org";
 import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 

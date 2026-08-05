@@ -121,46 +121,50 @@ export async function listAccessibleOrganizations(
     return getMemoryAccessibleOrganizations(email);
   }
 
-  const normalized = normalizeEmail(email);
+  try {
+    const normalized = normalizeEmail(email);
 
-  if (isAdminEmail(email)) {
+    if (isAdminEmail(email)) {
+      const prisma = getPrismaClient();
+      const organizations = await prisma.organization.findMany({
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      });
+
+      return organizations.map((organization, index) => ({
+        id: organization.id,
+        name: organization.name,
+        role: "admin" as const,
+        isDefault: organization.id === DEFAULT_ORGANIZATION_ID || index === 0,
+      }));
+    }
+
     const prisma = getPrismaClient();
-    const organizations = await prisma.organization.findMany({
-      where: { status: "active" },
-      orderBy: { name: "asc" },
+    const memberships = await prisma.organizationMembership.findMany({
+      where: {
+        userEmail: {
+          equals: normalized,
+          mode: "insensitive",
+        },
+        organization: {
+          status: "active",
+        },
+      },
+      include: {
+        organization: true,
+      },
+      orderBy: [{ isDefault: "desc" }, { organization: { name: "asc" } }],
     });
 
-    return organizations.map((organization, index) => ({
-      id: organization.id,
-      name: organization.name,
-      role: "admin" as const,
-      isDefault: organization.id === DEFAULT_ORGANIZATION_ID || index === 0,
+    return memberships.map((membership) => ({
+      id: membership.organizationId,
+      name: membership.organization.name,
+      role: membership.role as OrganizationRole,
+      isDefault: membership.isDefault,
     }));
+  } catch {
+    return getMemoryAccessibleOrganizations(email);
   }
-
-  const prisma = getPrismaClient();
-  const memberships = await prisma.organizationMembership.findMany({
-    where: {
-      userEmail: {
-        equals: normalized,
-        mode: "insensitive",
-      },
-      organization: {
-        status: "active",
-      },
-    },
-    include: {
-      organization: true,
-    },
-    orderBy: [{ isDefault: "desc" }, { organization: { name: "asc" } }],
-  });
-
-  return memberships.map((membership) => ({
-    id: membership.organizationId,
-    name: membership.organization.name,
-    role: membership.role as OrganizationRole,
-    isDefault: membership.isDefault,
-  }));
 }
 
 export async function getAccessibleOrganizationIds(

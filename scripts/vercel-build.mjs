@@ -1,5 +1,26 @@
 import { execSync } from "node:child_process";
 
+function deriveDirectPostgresUrl(databaseUrl) {
+  try {
+    const url = new URL(databaseUrl);
+    const usesPooler =
+      url.port === "6543" || url.searchParams.get("pgbouncer") === "true";
+
+    if (!usesPooler) {
+      return databaseUrl;
+    }
+
+    url.port = "5432";
+    url.searchParams.delete("pgbouncer");
+    console.warn(
+      "[vercel-build] Using direct Postgres port 5432 for migrations.",
+    );
+    return url.toString();
+  } catch {
+    return databaseUrl;
+  }
+}
+
 function resolveMigrationDatabaseUrl() {
   const directUrl = process.env.DIRECT_DATABASE_URL?.trim();
   if (directUrl) {
@@ -16,25 +37,7 @@ function resolveMigrationDatabaseUrl() {
     return null;
   }
 
-  try {
-    const url = new URL(databaseUrl);
-    const usesPooler =
-      url.port === "6543" || url.searchParams.get("pgbouncer") === "true";
-
-    if (usesPooler) {
-      console.warn(
-        "[vercel-build] DATABASE_URL uses Supabase pooler; skipping prisma migrate deploy.",
-      );
-      console.warn(
-        "[vercel-build] Set DIRECT_DATABASE_URL in Vercel to run migrations during build.",
-      );
-      return null;
-    }
-  } catch {
-    // Fall through and attempt migrate with DATABASE_URL.
-  }
-
-  return databaseUrl;
+  return deriveDirectPostgresUrl(databaseUrl);
 }
 
 function runMigrateDeploy(databaseUrl) {
@@ -60,10 +63,19 @@ function runProductionBuild() {
 const migrationDatabaseUrl = resolveMigrationDatabaseUrl();
 
 if (migrationDatabaseUrl) {
-  runMigrateDeploy(migrationDatabaseUrl);
+  try {
+    runMigrateDeploy(migrationDatabaseUrl);
+  } catch (error) {
+    console.error(
+      "[vercel-build] Migration step failed; continuing with app build.",
+    );
+    console.error(
+      error instanceof Error ? error.message : "Unknown migration error.",
+    );
+  }
 } else {
   console.warn(
-    "[vercel-build] Continuing without migrations so the deployment can complete.",
+    "[vercel-build] DATABASE_URL is not configured; skipping migrations.",
   );
 }
 

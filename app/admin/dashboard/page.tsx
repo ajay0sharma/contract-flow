@@ -9,9 +9,6 @@ import { CreateUserForm } from "@/components/admin/CreateUserForm";
 import { UserRoleTable } from "@/components/admin/UserRoleTable";
 import { WorkflowConfigForm } from "@/components/admin/WorkflowConfigForm";
 import { WorkflowPolicyForm } from "@/components/admin/WorkflowPolicyForm";
-import {
-  requireAdminPage,
-} from "@/app/actions/admin";
 import { requireAdminOrganizationPageContext } from "@/lib/admin-organization-page";
 import { adminDashboardSectionHref } from "@/lib/admin-dashboard-sections";
 import { loadAdminDashboardData } from "@/lib/admin-dashboard-data";
@@ -28,7 +25,6 @@ import {
 } from "@/lib/intake-form-store";
 
 export default async function AdminDashboardPage() {
-  await requireAdminPage();
   const { ensurePlatformDataHydrated } = await import("@/lib/platform-data-db");
   await ensurePlatformDataHydrated();
 

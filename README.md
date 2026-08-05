@@ -64,7 +64,7 @@ In [Clerk Dashboard](https://dashboard.clerk.com) → your app → **Domains**:
 
 ### 5. Supabase
 
-- **Database**: migrations run during Vercel build when `DIRECT_DATABASE_URL` is set (pooler `DATABASE_URL` alone will skip migrate so builds do not hang)
+- **Database**: migrations run during Vercel build via `npm run build:deploy` (uses `DIRECT_DATABASE_URL` or derives port 5432 from the Supabase pooler URL)
 - **Health check**: `GET /api/health` returns app and database status (public, no auth)
 - **Storage**: after first deploy, ensure buckets exist (one-time):
 
