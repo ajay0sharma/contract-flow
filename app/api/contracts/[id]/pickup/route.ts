@@ -4,7 +4,7 @@ import { getLegalAssignableUsers } from "@/lib/access-control";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { assignLegalReviewerAndPersist } from "@/lib/contract-persistence";
 import { reportError } from "@/lib/error-reporting";
-import { isDatabaseConfigured } from "@/lib/prisma";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { assignContractLegalReviewer } from "@/lib/contract-store";
 import { isAwaitingLegalPickup } from "@/lib/legal-assignment";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
@@ -46,14 +46,14 @@ export async function POST(
       );
     }
 
-    const record = isDatabaseConfigured()
-      ? await assignLegalReviewerAndPersist(
+    const record = allowMemoryPersistence()
+      ? assignContractLegalReviewer(id, assignee, auth.actor)
+      : await assignLegalReviewerAndPersist(
           id,
           organizationId,
           assignee,
           auth.actor,
-        )
-      : assignContractLegalReviewer(id, assignee, auth.actor);
+        );
 
     return NextResponse.json(record);
   } catch (error) {

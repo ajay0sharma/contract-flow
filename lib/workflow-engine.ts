@@ -1,7 +1,7 @@
 import { isPopulated, safeTrim } from "@/lib/string-utils";
 import { getIntakeDocumentTypeLabel } from "@/lib/intake-documents";
-import { getWorkflowConfig } from "@/lib/workflow-store";
-import { getWorkflowPolicy } from "@/lib/policy-store";
+import { getWorkflowConfig } from "@/lib/workflow-config-read";
+import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
 import type {
   AuditEvent,
   ContractIntakeInput,

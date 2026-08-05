@@ -1,3 +1,7 @@
+import { safeTrim } from "@/lib/string-utils";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
+import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
+
 export interface CounterpartyProfile {
   id: string;
   name: string;
@@ -105,7 +109,7 @@ const globalStore = globalThis as typeof globalThis & {
   __counterpartyProfiles?: CounterpartyProfile[];
 };
 
-function getStore(): CounterpartyProfile[] {
+function getMemoryStore(): CounterpartyProfile[] {
   if (!globalStore.__counterpartyProfiles) {
     globalStore.__counterpartyProfiles = [...seedCounterparties];
   }
@@ -113,34 +117,48 @@ function getStore(): CounterpartyProfile[] {
   return globalStore.__counterpartyProfiles;
 }
 
-export function getCounterparties(): CounterpartyProfile[] {
-  return getStore()
-    .map(normalizeCounterparty)
-    .sort((a, b) => a.name.localeCompare(b.name));
+export async function getCounterparties(
+  organizationId = DEFAULT_ORGANIZATION_ID,
+): Promise<CounterpartyProfile[]> {
+  if (allowMemoryPersistence()) {
+    return getMemoryStore()
+      .map(normalizeCounterparty)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const { loadCounterpartiesFromDatabase } = await import("@/lib/platform-data-db");
+  const records = await loadCounterpartiesFromDatabase(organizationId);
+  return records.map(normalizeCounterparty);
 }
 
-export function getCounterpartyById(id: string): CounterpartyProfile | undefined {
-  const profile = getStore().find((entry) => entry.id === id);
-
-  return profile ? normalizeCounterparty(profile) : undefined;
+export async function getCounterpartyById(
+  id: string,
+  organizationId = DEFAULT_ORGANIZATION_ID,
+): Promise<CounterpartyProfile | undefined> {
+  const profiles = await getCounterparties(organizationId);
+  return profiles.find((entry) => entry.id === id);
 }
 
-import { safeTrim } from "@/lib/string-utils";
-
-export function createCounterparty(
+export async function createCounterparty(
   input: CreateCounterpartyInput,
-): CounterpartyProfile {
-  const profile: CounterpartyProfile = {
-    id: `cp-${Date.now()}`,
-    name: safeTrim(input.name),
-    mainContactName: safeTrim(input.mainContactName),
-    mainContactTitle: safeTrim(input.mainContactTitle),
-    mainContactEmail: safeTrim(input.mainContactEmail),
-    mainContactPhone: safeTrim(input.mainContactPhone),
-    address: safeTrim(input.address),
-    createdAt: new Date().toISOString(),
-  };
+  organizationId = DEFAULT_ORGANIZATION_ID,
+): Promise<CounterpartyProfile> {
+  if (allowMemoryPersistence()) {
+    const profile: CounterpartyProfile = {
+      id: `cp-${Date.now()}`,
+      name: safeTrim(input.name),
+      mainContactName: safeTrim(input.mainContactName),
+      mainContactTitle: safeTrim(input.mainContactTitle),
+      mainContactEmail: safeTrim(input.mainContactEmail),
+      mainContactPhone: safeTrim(input.mainContactPhone),
+      address: safeTrim(input.address),
+      createdAt: new Date().toISOString(),
+    };
 
-  getStore().unshift(profile);
-  return profile;
+    getMemoryStore().unshift(profile);
+    return profile;
+  }
+
+  const { createCounterpartyInDatabase } = await import("@/lib/platform-data-db");
+  return createCounterpartyInDatabase(organizationId, input);
 }

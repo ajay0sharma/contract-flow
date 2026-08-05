@@ -21,7 +21,7 @@ import {
   sortContractRecords,
 } from "@/lib/contract-list-service";
 import { getPlatformUsers } from "@/lib/user-store";
-import { getWorkflowConfig } from "@/lib/workflow-store";
+import { getWorkflowConfig } from "@/lib/workflow-config-read";
 import {
   ensureDefaultIntakeForm,
   getActiveIntakeForm,
@@ -29,6 +29,8 @@ import {
 
 export default async function AdminDashboardPage() {
   await requireAdminPage();
+  const { ensurePlatformDataHydrated } = await import("@/lib/platform-data-db");
+  await ensurePlatformDataHydrated();
 
   const organizationId = resolveClauseLibraryOrganizationId();
   const allContracts = await listMergedContractRecords(organizationId);

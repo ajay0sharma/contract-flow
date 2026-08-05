@@ -1,8 +1,9 @@
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { countInProgressContractsUsingTemplate } from "@/lib/contract-list-service";
 import { recordTemplateAuditLog } from "@/lib/audit-log";
-import { countInProgressContractsUsingTemplate } from "@/lib/contract-store";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import {
   parseSelectOptions,
   validateTemplateVariables,
@@ -247,33 +248,6 @@ function getVersionStore(): ContractTemplateVersionRecord[] {
   }
 
   return globalStore.__contractTemplateVersionStore;
-}
-
-function mergeTemplateLists(
-  primary: ContractTemplateRecord[],
-  secondary: ContractTemplateRecord[],
-): ContractTemplateRecord[] {
-  const byId = new Map<string, ContractTemplateRecord>();
-
-  for (const template of secondary) {
-    byId.set(template.id, template);
-  }
-
-  for (const template of primary) {
-    byId.set(template.id, template);
-  }
-
-  return [...byId.values()].sort((left, right) => {
-    if (left.isDefault !== right.isDefault) {
-      return left.isDefault ? -1 : 1;
-    }
-
-    if (left.contractType !== right.contractType) {
-      return left.contractType.localeCompare(right.contractType);
-    }
-
-    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
-  });
 }
 
 function listMemoryTemplates(organizationId: string): ContractTemplateRecord[] {
@@ -691,20 +665,17 @@ export async function validateIntakeTemplateReference(
 export async function listContractTemplates(
   organizationId: string,
 ): Promise<ContractTemplateRecord[]> {
-  const memoryTemplates = listMemoryTemplates(organizationId);
-
-  if (!isDatabaseConfigured()) {
-    return memoryTemplates;
+  if (allowMemoryPersistence()) {
+    return listMemoryTemplates(organizationId);
   }
 
   try {
     const prisma = getPrismaClient();
 
     if (!prisma.contractTemplate?.findMany) {
-      console.error(
-        "Prisma client is missing contractTemplate delegate. Falling back to in-memory templates.",
+      throw new Error(
+        "Prisma client is missing contractTemplate delegate. Run `npx prisma generate`.",
       );
-      return memoryTemplates;
     }
 
     const records = await prisma.contractTemplate.findMany({
@@ -721,13 +692,10 @@ export async function listContractTemplates(
       ],
     });
 
-    return mergeTemplateLists(
-      records.map(mapTemplateRecord),
-      memoryTemplates,
-    );
+    return records.map(mapTemplateRecord);
   } catch (error) {
     console.error("Failed to list contract templates:", error);
-    return memoryTemplates;
+    throw error;
   }
 }
 

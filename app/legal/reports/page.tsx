@@ -8,7 +8,7 @@ import { requireLegalOrAdminPageUser } from "@/lib/page-auth";
 export default async function LegalReportsPage() {
   await requireLegalOrAdminPageUser();
 
-  const contracts = getAllContractsBySubmissionDate();
+  const contracts = await getAllContractsBySubmissionDate();
   const obligationEntries = await getObligationReportEntries(contracts);
 
   return (

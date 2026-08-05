@@ -2,15 +2,16 @@ import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { ContractIntakeForm } from "@/components/contracts/ContractIntakeForm";
-import { getActiveParentAgreementOptions } from "@/lib/contract-store";
+import { getActiveParentAgreementOptions } from "@/lib/contract-list-service";
 import { getCounterparties } from "@/lib/counterparty-store";
+import { ensurePlatformDataHydrated } from "@/lib/platform-data-db";
 import { getAllowedOrganizationIds } from "@/lib/clause-library-org";
 import { listIntakeContractTemplatesForOrganizations } from "@/lib/contract-template-store";
 import { resolveAgreementTypeRules } from "@/lib/contract-type-agreement-rules";
 import { listContractTypes } from "@/lib/contract-type-store";
 import { isAdminEmail, isLegalEmail, isSupportEmail } from "@/lib/legal-access";
 import { getUserDisplayName } from "@/lib/user-display-name";
-import { getWorkflowConfig } from "@/lib/workflow-store";
+import { getWorkflowConfig } from "@/lib/workflow-config-read";
 import {
   ensureDefaultIntakeForm,
   getActiveIntakeForm,
@@ -38,6 +39,7 @@ export default async function NewContractPage() {
   }
 
   const requesterName = getUserDisplayName(user);
+  await ensurePlatformDataHydrated();
   const workflowConfig = getWorkflowConfig();
   const organizationIds = getAllowedOrganizationIds();
   const organizationId = organizationIds[0] ?? "default";
@@ -70,8 +72,9 @@ export default async function NewContractPage() {
       intakeForm ?? (await ensureDefaultIntakeForm(organizationId));
   }
 
-  const parentAgreementOptions = getActiveParentAgreementOptions(
+  const parentAgreementOptions = await getActiveParentAgreementOptions(
     agreementTypeRules.parentAgreementTypes,
+    organizationId,
     email,
   );
 
@@ -79,7 +82,7 @@ export default async function NewContractPage() {
     <PageShell width="wide">
       <ContractIntakeForm
           requesterName={requesterName}
-          counterparties={getCounterparties()}
+          counterparties={await getCounterparties(organizationId)}
           agreementTypeRules={agreementTypeRules}
           parentAgreementOptions={parentAgreementOptions}
           contractTemplates={contractTemplates}

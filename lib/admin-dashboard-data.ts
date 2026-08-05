@@ -1,7 +1,7 @@
 import { clerkClient } from "@clerk/nextjs/server";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { listContractTypes } from "@/lib/contract-type-store";
-import { getWorkflowPolicy } from "@/lib/policy-store";
+import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
 import { getPlatformUsers } from "@/lib/user-store";
 import type { PlatformRole } from "@/lib/platform-config";
 import type { ContractTypeRecord } from "@/types/contract-template";

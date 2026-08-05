@@ -1,12 +1,14 @@
-import { dedupeContractRecordsById } from "@/lib/dedupe-contract-records";
-import { getAllContracts, getContractById, getContractByRecordLookup } from "@/lib/contract-store";
+import { getAllowedOrganizationIds } from "@/lib/clause-library-org";
+import { canViewContractRecord } from "@/lib/contract-store";
 import {
   deriveContractStatus,
   mapPrismaContractToRecord,
 } from "@/lib/contract-persistence";
+import { dedupeContractRecordsById } from "@/lib/dedupe-contract-records";
 import { reportError } from "@/lib/error-reporting";
+import { allowMemoryPersistence, requireDatabaseConfigured } from "@/lib/persistence-mode";
 import { normalizeContractRecordLookup } from "@/lib/record-id";
-import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
+import { getPrismaClient } from "@/lib/prisma";
 import type {
   ContractLifecycleStatus,
   ContractRecord,
@@ -14,6 +16,15 @@ import type {
 } from "@/types/contract";
 
 const LEGACY_ORGANIZATION_IDS = ["seed-org-001"] as const;
+
+const IN_PROGRESS_CONTRACT_STAGES: ContractStage[] = [
+  "request",
+  "legal_review",
+  "vp_review",
+  "finance_review",
+  "executive_signoff",
+  "awaiting_signature",
+];
 
 export type ContractListFilters = {
   stage?: string;
@@ -28,6 +39,10 @@ function resolveOrganizationIds(organizationId: string): string[] {
   return [organizationId, ...LEGACY_ORGANIZATION_IDS];
 }
 
+function resolveAllOrganizationIds(): string[] {
+  return [...new Set([...getAllowedOrganizationIds(), ...LEGACY_ORGANIZATION_IDS])];
+}
+
 export function withDerivedContractStatus(
   contract: ContractRecord,
 ): ContractRecord {
@@ -36,46 +51,6 @@ export function withDerivedContractStatus(
     contractStatus:
       contract.contractStatus ?? deriveContractStatus(contract.stage),
   };
-}
-
-function normalizeRecordNumberKey(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function mergeContractRecords(
-  primary: ContractRecord[],
-  secondary: ContractRecord[],
-): ContractRecord[] {
-  const byId = new Map<string, ContractRecord>();
-  const recordNumbersFromPrimary = new Set<string>();
-
-  for (const contract of primary.map(withDerivedContractStatus)) {
-    byId.set(contract.id, contract);
-    recordNumbersFromPrimary.add(
-      normalizeRecordNumberKey(contract.recordNumber),
-    );
-  }
-
-  for (const contract of secondary.map(withDerivedContractStatus)) {
-    if (byId.has(contract.id)) {
-      continue;
-    }
-
-    if (
-      recordNumbersFromPrimary.has(
-        normalizeRecordNumberKey(contract.recordNumber),
-      )
-    ) {
-      continue;
-    }
-
-    byId.set(contract.id, contract);
-  }
-
-  return [...byId.values()].sort(
-    (left, right) =>
-      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
-  );
 }
 
 function matchesSearch(contract: ContractRecord, search: string): boolean {
@@ -147,37 +122,160 @@ export function filterContractRecords(
   });
 }
 
+async function listDatabaseContractRecords(
+  organizationIds: string[],
+): Promise<ContractRecord[]> {
+  requireDatabaseForContracts("contract listing");
+  const prisma = getPrismaClient();
+  const records = await prisma.contract.findMany({
+    where: {
+      organizationId: {
+        in: organizationIds,
+      },
+    },
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  return records.map(mapPrismaContractToRecord);
+}
+
+async function loadDatabaseContractRecord(
+  lookup: string,
+  organizationIds: string[],
+): Promise<ContractRecord | null> {
+  requireDatabaseForContracts("contract lookup");
+  const trimmedLookup = lookup.trim();
+  const normalizedLookup = normalizeContractRecordLookup(trimmedLookup);
+  const prisma = getPrismaClient();
+  const record = await prisma.contract.findFirst({
+    where: {
+      organizationId: {
+        in: organizationIds,
+      },
+      OR: [
+        { id: trimmedLookup },
+        { id: normalizedLookup },
+        {
+          recordNumber: {
+            equals: trimmedLookup,
+            mode: "insensitive",
+          },
+        },
+      ],
+    },
+  });
+
+  return record ? withDerivedContractStatus(mapPrismaContractToRecord(record)) : null;
+}
+
+function requireDatabaseForContracts(scope: string): void {
+  requireDatabaseConfigured(scope);
+}
+
 export async function listMergedContractRecords(
   organizationId: string,
 ): Promise<ContractRecord[]> {
   const organizationIds = resolveOrganizationIds(organizationId);
-  let prismaContracts: ContractRecord[] = [];
 
-  if (isDatabaseConfigured()) {
-    try {
-      const prisma = getPrismaClient();
-      const records = await prisma.contract.findMany({
-        where: {
-          organizationId: {
-            in: organizationIds,
-          },
-        },
-        orderBy: [{ updatedAt: "desc" }],
-      });
-
-      prismaContracts = records.map(mapPrismaContractToRecord);
-    } catch (error) {
-      reportError(error, { scope: "listMergedContractRecords.prisma" });
-    }
+  if (allowMemoryPersistence()) {
+    const { getAllContracts } = await import("@/lib/contract-store");
+    const memoryContracts = getAllContracts().filter((contract) =>
+      organizationIds.includes(contract.companyProfileId),
+    );
+    return dedupeContractRecordsById(
+      memoryContracts.map(withDerivedContractStatus),
+    );
   }
 
-  const memoryContracts = getAllContracts().filter((contract) =>
-    organizationIds.includes(contract.companyProfileId),
-  );
+  try {
+    const prismaContracts = await listDatabaseContractRecords(organizationIds);
+    return dedupeContractRecordsById(
+      prismaContracts.map(withDerivedContractStatus),
+    );
+  } catch (error) {
+    reportError(error, { scope: "listMergedContractRecords.prisma" });
+    throw error;
+  }
+}
+
+export async function listAllVisibleContractRecords(
+  email: string,
+): Promise<ContractRecord[]> {
+  const organizationIds = resolveAllOrganizationIds();
+  const merged: ContractRecord[] = [];
+
+  for (const organizationId of organizationIds) {
+    const records = await listMergedContractRecords(organizationId);
+    merged.push(...records);
+  }
 
   return dedupeContractRecordsById(
-    mergeContractRecords(prismaContracts, memoryContracts),
+    merged
+      .filter((contract) => canViewContractRecord(contract, email))
+      .map(withDerivedContractStatus),
   );
+}
+
+export async function getActiveParentAgreementOptions(
+  parentAgreementTypes: string[],
+  organizationId: string,
+  viewerEmail?: string,
+): Promise<ContractRecord[]> {
+  const allowedTypes = new Set(parentAgreementTypes);
+
+  if (allowedTypes.size === 0) {
+    return [];
+  }
+
+  const contracts = viewerEmail
+    ? (await listAllVisibleContractRecords(viewerEmail)).filter((contract) =>
+        resolveOrganizationIds(organizationId).includes(contract.companyProfileId),
+      )
+    : await listMergedContractRecords(organizationId);
+
+  return contracts
+    .filter(
+      (contract) =>
+        contract.stage === "active" && allowedTypes.has(contract.contractType),
+    )
+    .sort((a, b) => {
+      const recordCompare = a.recordNumber.localeCompare(b.recordNumber);
+      return recordCompare !== 0 ? recordCompare : a.title.localeCompare(b.title);
+    });
+}
+
+export async function countInProgressContractsUsingTemplate(
+  templateId: string,
+): Promise<number> {
+  if (allowMemoryPersistence()) {
+    const { countInProgressContractsUsingTemplate: countInMemory } = await import(
+      "@/lib/contract-store"
+    );
+    return countInMemory(templateId);
+  }
+
+  const prisma = getPrismaClient();
+  return prisma.contract.count({
+    where: {
+      templateId,
+      stage: {
+        in: IN_PROGRESS_CONTRACT_STAGES,
+      },
+    },
+  });
+}
+
+export async function loadContractRecordByLookup(
+  recordLookup: string,
+  organizationId: string,
+): Promise<ContractRecord | null> {
+  const normalizedLookup = normalizeContractRecordLookup(recordLookup);
+
+  if (!normalizedLookup) {
+    return null;
+  }
+
+  return loadMergedContractRecord(normalizedLookup, organizationId);
 }
 
 export function buildContractStatusCounts(
@@ -255,53 +353,35 @@ export async function loadMergedContractRecord(
   organizationId: string,
 ): Promise<ContractRecord | null> {
   const trimmedLookup = lookup.trim();
-  const normalizedLookup = normalizeContractRecordLookup(trimmedLookup);
   const organizationIds = resolveOrganizationIds(organizationId);
 
-  if (isDatabaseConfigured()) {
-    try {
-      const prisma = getPrismaClient();
-      const record = await prisma.contract.findFirst({
-        where: {
-          organizationId: {
-            in: organizationIds,
-          },
-          OR: [
-            { id: trimmedLookup },
-            { id: normalizedLookup },
-            {
-              recordNumber: {
-                equals: trimmedLookup,
-                mode: "insensitive",
-              },
-            },
-          ],
-        },
-      });
+  if (allowMemoryPersistence()) {
+    const {
+      getContractById,
+      getContractByRecordLookup,
+    } = await import("@/lib/contract-store");
+    const memoryRecord =
+      getContractById(trimmedLookup) ??
+      getContractByRecordLookup(trimmedLookup);
 
-      if (record) {
-        return withDerivedContractStatus(mapPrismaContractToRecord(record));
-      }
-    } catch (error) {
-      reportError(error, {
-        scope: "loadMergedContractRecord.prisma",
-        lookup: trimmedLookup,
-      });
+    if (!memoryRecord) {
+      return null;
     }
+
+    if (!organizationIds.includes(memoryRecord.companyProfileId)) {
+      return null;
+    }
+
+    return withDerivedContractStatus(memoryRecord);
   }
 
-  const memoryRecord =
-    getContractById(trimmedLookup) ??
-    getContractById(normalizedLookup) ??
-    getContractByRecordLookup(trimmedLookup);
-
-  if (!memoryRecord) {
-    return null;
+  try {
+    return await loadDatabaseContractRecord(trimmedLookup, organizationIds);
+  } catch (error) {
+    reportError(error, {
+      scope: "loadMergedContractRecord.prisma",
+      lookup: trimmedLookup,
+    });
+    throw error;
   }
-
-  if (!organizationIds.includes(memoryRecord.companyProfileId)) {
-    return null;
-  }
-
-  return withDerivedContractStatus(memoryRecord);
 }

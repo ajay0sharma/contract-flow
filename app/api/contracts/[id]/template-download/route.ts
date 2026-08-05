@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { recordTemplateAuditLog } from "@/lib/audit-log";
 import { canViewContractRecord, getContractById } from "@/lib/contract-store";
+import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getTemplateFileAtVersion } from "@/lib/contract-template-store";
 import { captureException } from "@/lib/error-reporting";
 import { getUserDisplayName } from "@/lib/user-display-name";
@@ -24,7 +27,12 @@ export async function GET(
 
   const email = user.primaryEmailAddress?.emailAddress ?? "";
   const { id: contractId } = await context.params;
-  const contract = getContractById(contractId);
+  const contract = allowMemoryPersistence()
+    ? getContractById(contractId)
+    : await loadMergedContractRecord(
+        contractId,
+        resolveClauseLibraryOrganizationId(),
+      );
 
   if (!contract) {
     return NextResponse.json({ error: "Contract not found." }, { status: 404 });

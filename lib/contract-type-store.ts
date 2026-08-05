@@ -1,4 +1,5 @@
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import {
   buildSystemContractTypeSeed,
   isValidContractTypeSlug,
@@ -166,8 +167,10 @@ export async function listContractTypes(
     if (records.length > 0) {
       return records.map(mapContractTypeRecord);
     }
-  } catch {
-    // Table missing, migration not applied yet, or database unavailable.
+  } catch (error) {
+    if (!allowMemoryPersistence()) {
+      throw error;
+    }
   }
 
   return listMemoryContractTypes(organizationId, options);

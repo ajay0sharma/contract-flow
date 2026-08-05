@@ -1,5 +1,6 @@
 import { getAllowedOrganizationIds, resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { getDirectoryConfig } from "@/lib/directory-sync";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
 import { decryptCredentials, encryptCredentials } from "@/lib/po-integration";
 import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
@@ -112,8 +113,10 @@ export async function getOrganizationEmailConfig(
     if (record) {
       return mapEmailConfigRow(record);
     }
-  } catch {
-    // Fall through to memory/default.
+  } catch (error) {
+    if (!allowMemoryPersistence()) {
+      throw error;
+    }
   }
 
   return getMemoryStore().get(organizationId) ?? buildDefaultConfig(organizationId);

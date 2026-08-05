@@ -7,10 +7,13 @@ import { LifecycleTimeline } from "@/components/contracts/LifecycleTimeline";
 import { StageBadge } from "@/components/contracts/StageBadge";
 import {
   canViewContractRecord,
-  getContractById,
   getCurrentApprover,
   resolveContractRecordNumber,
 } from "@/lib/contracts";
+import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
+import { getContractById } from "@/lib/contract-store";
 import { isSupportEmail } from "@/lib/access-control";
 
 interface ReviewPageProps {
@@ -19,7 +22,12 @@ interface ReviewPageProps {
 
 export default async function ReviewPage({ params }: ReviewPageProps) {
   const { id } = await params;
-  const contract = getContractById(id);
+  const contract = allowMemoryPersistence()
+    ? getContractById(id)
+    : await loadMergedContractRecord(
+        id,
+        resolveClauseLibraryOrganizationId(),
+      );
   const user = await currentUser();
 
   if (!user) {

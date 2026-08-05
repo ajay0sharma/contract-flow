@@ -1,5 +1,6 @@
 import type { AuditLogEntityType } from "@/lib/generated/prisma/enums";
 import { Prisma } from "@/lib/generated/prisma/client";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
 
 export type TemplateAuditAction =
@@ -119,6 +120,11 @@ export async function recordAuditLog(
     return mapAuditRecord(record);
   } catch (error) {
     console.error("Failed to record audit log:", error);
+
+    if (!allowMemoryPersistence()) {
+      throw error;
+    }
+
     getAuditStore().unshift(entry);
     return entry;
   }
@@ -181,6 +187,11 @@ export async function listTemplateAuditLog(
     return records.map(mapAuditRecord);
   } catch (error) {
     console.error("Failed to list template audit log:", error);
+
+    if (!allowMemoryPersistence()) {
+      throw error;
+    }
+
     return getAuditStore()
       .filter(
         (entry) =>

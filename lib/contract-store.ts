@@ -20,6 +20,7 @@ import {
   normalizeContractRecordLookup,
   resolveContractRecordNumber,
 } from "@/lib/record-id";
+import { assertMemoryPersistenceAllowed } from "@/lib/persistence-mode";
 import type {
   AppendContractEmailInput,
   ContractAttachment,
@@ -834,6 +835,7 @@ function syncSeedContracts(store: ContractRecord[]): ContractRecord[] {
 }
 
 function getStore(): ContractRecord[] {
+  assertMemoryPersistenceAllowed("In-memory contract storage");
   if (!globalStore.__contractStore) {
     globalStore.__contractStore = seedContracts.map(normalizeContractRecord);
   } else {

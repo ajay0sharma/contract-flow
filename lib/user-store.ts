@@ -1,94 +1,48 @@
+import {
+  setCachedPlatformUsers,
+} from "@/lib/platform-data-cache";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import type { PlatformRole, PlatformUser } from "@/lib/platform-config";
+import {
+  getPlatformUser,
+  getPlatformUsers,
+} from "@/lib/platform-user-read";
 
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
+export { getPlatformUser, getPlatformUsers } from "@/lib/platform-user-read";
 
-const seedUsers: PlatformUser[] = [
-  {
-    email: "as.ops.consulting@gmail.com",
-    name: "AS Ops Consulting",
-    role: "admin",
-    createdAt: "2026-06-01T00:00:00.000Z",
-  },
-  {
-    email: "ajay.sharma.jd@gmail.com",
-    name: "Ajay Sharma",
-    role: "legal",
-    createdAt: "2026-06-01T00:00:00.000Z",
-  },
-  {
-    email: "support@example.com",
-    name: "Support User",
-    role: "support",
-    createdAt: "2026-06-01T00:00:00.000Z",
-  },
-  {
-    email: "marcus@example.com",
-    name: "Marcus Chen",
-    role: "business",
-    createdAt: "2026-06-01T00:00:00.000Z",
-  },
-  {
-    email: "elena@example.com",
-    name: "Elena Brooks",
-    role: "business",
-    createdAt: "2026-06-01T00:00:00.000Z",
-  },
-  {
-    email: "jordan@example.com",
-    name: "Jordan Lee",
-    role: "business",
-    createdAt: "2026-06-01T00:00:00.000Z",
-  },
-];
+export async function upsertPlatformUser(user: PlatformUser): Promise<PlatformUser> {
+  if (allowMemoryPersistence()) {
+    const globalStore = globalThis as typeof globalThis & {
+      __platformUsers?: PlatformUser[];
+    };
 
-const globalStore = globalThis as typeof globalThis & {
-  __platformUsers?: PlatformUser[];
-};
+    if (!globalStore.__platformUsers) {
+      globalStore.__platformUsers = getPlatformUsers();
+    }
 
-function getStore(): PlatformUser[] {
-  if (!globalStore.__platformUsers) {
-    globalStore.__platformUsers = [...seedUsers];
-  }
+    const store = globalStore.__platformUsers;
+    const normalized = user.email.trim().toLowerCase();
+    const index = store.findIndex(
+      (entry) => entry.email.trim().toLowerCase() === normalized,
+    );
 
-  return globalStore.__platformUsers;
-}
+    if (index === -1) {
+      store.unshift(user);
+      return user;
+    }
 
-export function getPlatformUsers(): PlatformUser[] {
-  return [...getStore()].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-}
-
-export function getPlatformUser(email: string): PlatformUser | undefined {
-  const normalized = normalizeEmail(email);
-
-  return getStore().find(
-    (user) => normalizeEmail(user.email) === normalized,
-  );
-}
-
-export function upsertPlatformUser(user: PlatformUser): PlatformUser {
-  const store = getStore();
-  const normalized = normalizeEmail(user.email);
-  const index = store.findIndex(
-    (entry) => normalizeEmail(entry.email) === normalized,
-  );
-
-  if (index === -1) {
-    store.unshift(user);
+    store[index] = user;
     return user;
   }
 
-  store[index] = user;
-  return user;
+  const { savePlatformUserToDatabase } = await import("@/lib/platform-data-db");
+  return savePlatformUserToDatabase(user);
 }
 
-export function updatePlatformUserRole(
+export async function updatePlatformUserRole(
   email: string,
   role: PlatformRole,
-): PlatformUser {
+): Promise<PlatformUser> {
   const existing = getPlatformUser(email);
 
   if (!existing) {
@@ -96,4 +50,14 @@ export function updatePlatformUserRole(
   }
 
   return upsertPlatformUser({ ...existing, role });
+}
+
+export async function hydratePlatformUsersCache(): Promise<void> {
+  if (allowMemoryPersistence()) {
+    return;
+  }
+
+  const { loadPlatformUsersFromDatabase } = await import("@/lib/platform-data-db");
+  const users = await loadPlatformUsersFromDatabase();
+  setCachedPlatformUsers(users);
 }

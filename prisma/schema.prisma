@@ -550,3 +550,38 @@ model IntakeFormField {
   @@unique([sectionId, key])
   @@index([sectionId, displayOrder])
 }
+
+model PlatformUser {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+}
+
+model PlatformWorkflowSettings {
+  organizationId String   @id @default("default")
+  workflowConfig Json
+  workflowPolicy Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Counterparty {
+  id               String   @id @default(cuid())
+  organizationId   String   @default("default")
+  name             String
+  mainContactName  String
+  mainContactTitle String   @default("")
+  mainContactEmail String
+  mainContactPhone String   @default("")
+  address          String   @db.Text
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([organizationId, name])
+}

@@ -3,8 +3,11 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { isLegalEmail } from "@/lib/access-control";
-import { getContractById } from "@/lib/contract-store";
 import { canViewContractRecord } from "@/lib/contract-store";
+import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
+import { getContractById } from "@/lib/contract-store";
 import {
   getContractObligationView,
   runObligationScan,
@@ -34,7 +37,13 @@ export async function scanContractObligationsAction(
     throw new Error("Only legal users can run obligation scans.");
   }
 
-  const contract = getContractById(contractId);
+  const contract = allowMemoryPersistence()
+    ? getContractById(contractId)
+    : await loadMergedContractRecord(
+        contractId,
+        (await resolveContractOrganizationId(contractId)) ??
+          "default",
+      );
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -57,7 +66,13 @@ export async function getContractObligationViewAction(
   contractId: string,
 ): Promise<ContractObligationView> {
   const actor = await getActor();
-  const contract = getContractById(contractId);
+  const contract = allowMemoryPersistence()
+    ? getContractById(contractId)
+    : await loadMergedContractRecord(
+        contractId,
+        (await resolveContractOrganizationId(contractId)) ??
+          "default",
+      );
 
   if (!contract) {
     throw new Error("Contract not found.");

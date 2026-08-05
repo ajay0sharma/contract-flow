@@ -7,5 +7,6 @@ export type {
 export {
   getDefaultWorkflowConfig,
   getWorkflowConfig,
-  updateWorkflowConfig,
-} from "@/lib/workflow-store";
+} from "@/lib/workflow-config-read";
+
+export { updateWorkflowConfig } from "@/lib/workflow-store";

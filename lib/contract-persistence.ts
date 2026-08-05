@@ -10,11 +10,15 @@ import {
 } from "@/lib/contract-email-dedup";
 import { sendContractRecordEmail } from "@/lib/contract-email-service";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
-import { appendRelatedEmailToRecord, addContractEmail } from "@/lib/contract-store";
-import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
+import { appendRelatedEmailToRecord, addContractEmail, normalizeContractRecord } from "@/lib/contract-store";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
+import { getPrismaClient } from "@/lib/prisma";
+import { safeTrim } from "@/lib/string-utils";
 import {
+  activateContract,
   approveContractStep,
   createContractFromIntake,
+  parseContractAmount,
   reassignCurrentApprovalStep,
   rejectContractStep,
   assignLegalReviewerStep,
@@ -24,9 +28,11 @@ import type {
   AddContractEmailInput,
   ContractAttachment,
   ContractEmail,
+  ContractIntakeAttachmentInput,
   ContractIntakeInput,
   ContractLifecycleStatus,
   ContractRecord,
+  ContractRecordUpdateInput,
   ContractStage,
   ContractEmailDirection,
   SendContractEmailInput,
@@ -599,7 +605,7 @@ export async function addContractEmailAndPersist(
     actor.email,
   );
 
-  if (isDatabaseConfigured()) {
+  if (!allowMemoryPersistence()) {
     await saveContractRecord(updated);
     await recordContractAuditLog({
       organizationId: resolveClauseLibraryOrganizationId(contract.companyProfileId),
@@ -671,7 +677,7 @@ export async function sendContractEmailAndPersist(
     "Email sent",
   );
 
-  if (isDatabaseConfigured()) {
+  if (!allowMemoryPersistence()) {
     await saveContractRecord(updated);
     await recordContractAuditLog({
       organizationId: resolveClauseLibraryOrganizationId(contract.companyProfileId),
@@ -778,7 +784,7 @@ export async function syncInboundContractEmailAndPersist(
     throw new Error("Failed to capture inbound email.");
   }
 
-  if (isDatabaseConfigured()) {
+  if (!allowMemoryPersistence()) {
     await saveContractRecord(updated);
     await recordContractAuditLog({
       organizationId: located.organizationId,
@@ -809,4 +815,177 @@ export async function syncInboundContractEmailAndPersist(
     emailId: capturedEmail.id,
     duplicate: false,
   };
+}
+
+export async function markContractActiveAndPersist(
+  contractId: string,
+  organizationId: string,
+  actorName: string,
+  actorEmail: string,
+): Promise<ContractRecord> {
+  const contract = await loadContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const updated = normalizeContractRecord(
+    activateContract(contract, actorName, actorEmail),
+  );
+  await saveContractRecord(updated);
+  return updated;
+}
+
+export async function updateContractRecordDetailsAndPersist(
+  contractId: string,
+  organizationId: string,
+  input: ContractRecordUpdateInput,
+  actor: { email: string; name: string },
+): Promise<ContractRecord> {
+  const contract = await loadContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const requiredFields = [
+    input.department,
+    input.contractType,
+    input.contractStartDate,
+    input.contractEndDate,
+    input.title,
+    input.description,
+    input.companyName,
+    input.address,
+    input.mainContactName,
+    input.mainContactEmail,
+  ];
+
+  if (requiredFields.some((value) => !safeTrim(value))) {
+    throw new Error("Complete all required contract and counterparty fields.");
+  }
+
+  const timestamp = new Date().toISOString();
+  const amount = safeTrim(input.amount);
+  const updated = normalizeContractRecord({
+    ...contract,
+    department: safeTrim(input.department),
+    contractType: safeTrim(input.contractType),
+    contractStartDate: safeTrim(input.contractStartDate),
+    contractEndDate: safeTrim(input.contractEndDate),
+    title: safeTrim(input.title),
+    description: safeTrim(input.description),
+    amount,
+    amountNumeric: parseContractAmount(amount),
+    budgeted: amount ? input.budgeted : null,
+    poNumber: amount ? safeTrim(input.poNumber) : "",
+    supplierId: amount ? safeTrim(input.supplierId) : "",
+    supplierName: amount ? safeTrim(input.supplierName) : "",
+    otherNotes: safeTrim(input.otherNotes),
+    companyName: safeTrim(input.companyName),
+    address: safeTrim(input.address),
+    mainContactName: safeTrim(input.mainContactName),
+    mainContactTitle: safeTrim(input.mainContactTitle),
+    mainContactEmail: safeTrim(input.mainContactEmail),
+    mainContactPhone: safeTrim(input.mainContactPhone),
+    auditTrail: [
+      ...(contract.auditTrail ?? []),
+      {
+        id: `audit-${Date.now()}`,
+        timestamp,
+        actorName: actor.name,
+        actorEmail: actor.email,
+        action: "Contract record edited",
+        detail: "Legal updated locked contract record fields.",
+      },
+    ],
+    updatedAt: timestamp,
+  });
+
+  await saveContractRecord(updated);
+  return updated;
+}
+
+export async function setContractConfidentialityAndPersist(
+  contractId: string,
+  organizationId: string,
+  confidential: boolean,
+  actor: { email: string; name: string },
+): Promise<ContractRecord> {
+  const contract = await loadContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const timestamp = new Date().toISOString();
+  const updated = normalizeContractRecord({
+    ...contract,
+    confidential,
+    auditTrail: [
+      ...(contract.auditTrail ?? []),
+      {
+        id: `audit-${Date.now()}`,
+        timestamp,
+        actorName: actor.name,
+        actorEmail: actor.email,
+        action: confidential
+          ? "Marked confidential"
+          : "Removed confidential status",
+        detail: confidential
+          ? "Legal restricted this contract record to requester, support, legal, and admin users."
+          : "Legal removed confidential access restrictions from this contract record.",
+      },
+    ],
+    updatedAt: timestamp,
+  });
+
+  await saveContractRecord(updated);
+  return updated;
+}
+
+export async function addContractAttachmentAndPersist(
+  contractId: string,
+  organizationId: string,
+  input: ContractIntakeAttachmentInput,
+  actor: { email: string; name: string },
+): Promise<ContractRecord> {
+  const contract = await loadContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const timestamp = new Date().toISOString();
+  const attachment: ContractAttachment = {
+    id: `att-${Date.now()}`,
+    title: input.fileName,
+    fileName: input.fileName,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    documentType: input.documentType,
+    uploadedAt: timestamp,
+    uploadedByName: actor.name,
+    uploadedByEmail: actor.email,
+    dataBase64: input.dataBase64,
+  };
+  const updated = normalizeContractRecord({
+    ...contract,
+    attachments: [...(contract.attachments ?? []), attachment],
+    auditTrail: [
+      ...(contract.auditTrail ?? []),
+      {
+        id: `audit-${Date.now()}`,
+        timestamp,
+        actorName: actor.name,
+        actorEmail: actor.email,
+        action: "Document uploaded",
+        detail: `${attachment.title} was uploaded to the contract record.`,
+      },
+    ],
+    updatedAt: timestamp,
+  });
+
+  await saveContractRecord(updated);
+  return updated;
 }

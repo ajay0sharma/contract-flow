@@ -3,6 +3,7 @@ import {
   deriveContractStatus,
 } from "@/lib/contract-persistence";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { reportError } from "@/lib/error-reporting";
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
 import type { ContractLifecycleStatus, ContractRecord, ContractStage } from "@/types/contract";
@@ -134,6 +135,11 @@ async function loadPrismaRelationshipSources(
     }));
   } catch (error) {
     reportError(error, { scope: "loadPrismaRelationshipSources" });
+
+    if (!allowMemoryPersistence()) {
+      throw error;
+    }
+
     return [];
   }
 }
@@ -187,12 +193,12 @@ async function loadRelationshipSources(
     excludeId?: string;
   },
 ): Promise<RelationshipSource[]> {
-  const [prismaRecords, memoryRecords] = await Promise.all([
-    loadPrismaRelationshipSources(organizationIds, where),
-    Promise.resolve(loadMemoryRelationshipSources(organizationIds, where)),
-  ]);
+  if (allowMemoryPersistence()) {
+    return loadMemoryRelationshipSources(organizationIds, where);
+  }
 
-  return mergeSourcesById([...prismaRecords, ...memoryRecords]);
+  const prismaRecords = await loadPrismaRelationshipSources(organizationIds, where);
+  return mergeSourcesById(prismaRecords);
 }
 
 async function loadSingleRelationshipSource(

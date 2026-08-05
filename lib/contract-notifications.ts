@@ -4,7 +4,7 @@ import {
   type ContractEmailDispatchPayload,
 } from "@/lib/contract-email-service";
 import { getCurrentApprover } from "@/lib/workflow-engine";
-import { getWorkflowPolicy } from "@/lib/policy-store";
+import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
 import type { ContractRecord } from "@/types/contract";
 
 function buildContractUrl(contractId: string): string {

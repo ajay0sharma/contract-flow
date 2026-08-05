@@ -1,6 +1,6 @@
 import { getAdminEmails } from "@/lib/platform-config";
-import { getPlatformUser, getPlatformUsers } from "@/lib/user-store";
-import { getWorkflowConfig } from "@/lib/workflow-store";
+import { getPlatformUser, getPlatformUsers } from "@/lib/platform-user-read";
+import { getWorkflowConfig } from "@/lib/workflow-config-read";
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();

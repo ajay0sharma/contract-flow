@@ -8,7 +8,6 @@ import {
   approveContract,
   assignContractLegalReviewer,
   canViewContractRecord,
-  getContractById,
   getContractByRecordLookup,
   markContractActive,
   rejectContract,
@@ -16,16 +15,28 @@ import {
   submitContractIntake,
   updateContractRecordDetails,
 } from "@/lib/contract-store";
-import { assignLegalReviewerAndPersist, addContractEmailAndPersist } from "@/lib/contract-persistence";
+import {
+  addContractAttachmentAndPersist,
+  addContractEmailAndPersist,
+  approveAndPersist,
+  assignLegalReviewerAndPersist,
+  createAndPersistContract,
+  markContractActiveAndPersist,
+  rejectAndPersist,
+  setContractConfidentialityAndPersist,
+  updateContractRecordDetailsAndPersist,
+} from "@/lib/contract-persistence";
+import { loadContractRecordByLookup, loadMergedContractRecord } from "@/lib/contract-list-service";
 import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
-import { isDatabaseConfigured } from "@/lib/prisma";
 import { createCounterparty } from "@/lib/counterparty-store";
+import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import type {
   AddContractEmailInput,
   ContractIntakeAttachmentInput,
   ContractIntakeInput,
+  ContractRecord,
   ContractRecordUpdateInput,
 } from "@/types/contract";
 import {
@@ -44,13 +55,12 @@ import {
 } from "@/lib/access-control";
 import { resolveAgreementTypeRules } from "@/lib/contract-type-agreement-rules";
 import { listContractTypes } from "@/lib/contract-type-store";
-import { getWorkflowConfig } from "@/lib/workflow-store";
+import { getWorkflowConfig } from "@/lib/workflow-config-read";
 import {
   getContractTemplateById,
   validateIntakeTemplateReference,
 } from "@/lib/contract-template-store";
 import { recordContractAuditLog } from "@/lib/audit-log";
-
 import { isPopulated, safeTrim } from "@/lib/string-utils";
 
 async function getActor() {
@@ -66,8 +76,26 @@ async function getActor() {
   };
 }
 
-function requireCanViewContract(contractId: string, actorEmail: string) {
-  const contract = getContractById(contractId);
+async function resolveOrganizationIdForContract(
+  contractId: string,
+): Promise<string> {
+  const organizationId = await resolveContractOrganizationId(contractId);
+
+  if (!organizationId) {
+    throw new Error("Contract not found.");
+  }
+
+  return organizationId;
+}
+
+async function requireCanViewContract(
+  contractId: string,
+  actorEmail: string,
+): Promise<ContractRecord> {
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+  const contract = allowMemoryPersistence()
+    ? await loadMergedContractRecord(contractId, organizationId)
+    : await loadMergedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -110,7 +138,9 @@ export async function submitIntakeAction(
   let parentAgreementId: string | undefined;
 
   if (input.parentAgreementId) {
-    const parentAgreement = getContractByRecordLookup(input.parentAgreementId);
+    const parentAgreement = allowMemoryPersistence()
+      ? getContractByRecordLookup(input.parentAgreementId)
+      : await loadContractRecordByLookup(input.parentAgreementId, organizationId);
 
     if (!parentAgreement) {
       throw new Error("Parent agreement contract record ID was not found.");
@@ -161,14 +191,17 @@ export async function submitIntakeAction(
   let counterpartyId = input.counterpartyId;
 
   if (input.saveNewCounterparty) {
-    const profile = createCounterparty({
-      name: input.companyName,
-      mainContactName: input.mainContactName,
-      mainContactTitle: input.mainContactTitle,
-      mainContactEmail: input.mainContactEmail,
-      mainContactPhone: input.mainContactPhone,
-      address: input.address,
-    });
+    const profile = await createCounterparty(
+      {
+        name: input.companyName,
+        mainContactName: input.mainContactName,
+        mainContactTitle: input.mainContactTitle,
+        mainContactEmail: input.mainContactEmail,
+        mainContactPhone: input.mainContactPhone,
+        address: input.address,
+      },
+      organizationId,
+    );
     counterpartyId = profile.id;
   }
 
@@ -194,7 +227,7 @@ export async function submitIntakeAction(
     throw new Error("Template version cannot be provided without a template.");
   }
 
-  const contract = submitContractIntake({
+  const intakeInput: ContractIntakeInput = {
     ...input,
     parentAgreementId,
     templateId,
@@ -207,7 +240,11 @@ export async function submitIntakeAction(
     counterpartyId,
     requesterName: actor.name,
     requesterEmail: actor.email,
-  });
+  };
+
+  const contract = allowMemoryPersistence()
+    ? submitContractIntake(intakeInput)
+    : await createAndPersistContract(intakeInput, organizationId);
 
   if (templateId && templateVersion) {
     const template = await getContractTemplateById(
@@ -216,7 +253,7 @@ export async function submitIntakeAction(
     );
 
     await recordContractAuditLog({
-      organizationId: input.companyProfileId,
+      organizationId: resolveClauseLibraryOrganizationId(input.companyProfileId),
       entityId: contract.id,
       action: "contract_draft_generated",
       detail: template
@@ -244,17 +281,21 @@ export async function createCounterpartyForIntakeAction(input: {
   mainContactEmail: string;
   mainContactPhone?: string;
   address: string;
+  organizationId?: string;
 }): Promise<string> {
   await getActor();
 
-  const profile = createCounterparty({
-    name: safeTrim(input.companyName),
-    mainContactName: safeTrim(input.mainContactName),
-    mainContactTitle: safeTrim(input.mainContactTitle),
-    mainContactEmail: safeTrim(input.mainContactEmail),
-    mainContactPhone: safeTrim(input.mainContactPhone),
-    address: safeTrim(input.address),
-  });
+  const profile = await createCounterparty(
+    {
+      name: safeTrim(input.companyName),
+      mainContactName: safeTrim(input.mainContactName),
+      mainContactTitle: safeTrim(input.mainContactTitle),
+      mainContactEmail: safeTrim(input.mainContactEmail),
+      mainContactPhone: safeTrim(input.mainContactPhone),
+      address: safeTrim(input.address),
+    },
+    resolveClauseLibraryOrganizationId(input.organizationId),
+  );
 
   return profile.id;
 }
@@ -264,13 +305,25 @@ export async function approveContractAction(
   note: string,
 ) {
   const actor = await getActor();
-  requireCanViewContract(contractId, actor.email);
+  await requireCanViewContract(contractId, actor.email);
 
   if (isSupportEmail(actor.email)) {
     throw new Error("Support users cannot approve contracts.");
   }
 
-  approveContract(contractId, actor.email, actor.name, note || undefined);
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+
+  if (allowMemoryPersistence()) {
+    approveContract(contractId, actor.email, actor.name, note || undefined);
+  } else {
+    await approveAndPersist(
+      contractId,
+      organizationId,
+      actor.email,
+      actor.name,
+      note || undefined,
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath(`/contracts/${contractId}`);
@@ -297,15 +350,17 @@ export async function assignLegalReviewerAction(
     throw new Error("Select a user with legal permissions.");
   }
 
-  if (isDatabaseConfigured()) {
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+
+  if (allowMemoryPersistence()) {
+    assignContractLegalReviewer(contractId, assignee, actor);
+  } else {
     await assignLegalReviewerAndPersist(
       contractId,
-      resolveClauseLibraryOrganizationId(),
+      organizationId,
       assignee,
       actor,
     );
-  } else {
-    assignContractLegalReviewer(contractId, assignee, actor);
   }
 
   revalidatePath("/legal/dashboard");
@@ -341,7 +396,18 @@ export async function updateContractRecordAction(
     throw new Error("Only legal users can edit contract records.");
   }
 
-  updateContractRecordDetails(contractId, input, actor);
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+
+  if (allowMemoryPersistence()) {
+    updateContractRecordDetails(contractId, input, actor);
+  } else {
+    await updateContractRecordDetailsAndPersist(
+      contractId,
+      organizationId,
+      input,
+      actor,
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/legal/dashboard");
@@ -359,7 +425,18 @@ export async function setContractConfidentialAction(
     throw new Error("Only legal users can update confidentiality.");
   }
 
-  setContractConfidentiality(contractId, confidential, actor);
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+
+  if (allowMemoryPersistence()) {
+    setContractConfidentiality(contractId, confidential, actor);
+  } else {
+    await setContractConfidentialityAndPersist(
+      contractId,
+      organizationId,
+      confidential,
+      actor,
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/legal/dashboard");
@@ -374,13 +451,25 @@ export async function rejectContractAction(
   note: string,
 ) {
   const actor = await getActor();
-  requireCanViewContract(contractId, actor.email);
+  await requireCanViewContract(contractId, actor.email);
 
   if (isSupportEmail(actor.email)) {
     throw new Error("Support users cannot reject contracts.");
   }
 
-  rejectContract(contractId, actor.email, actor.name, note || undefined);
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+
+  if (allowMemoryPersistence()) {
+    rejectContract(contractId, actor.email, actor.name, note || undefined);
+  } else {
+    await rejectAndPersist(
+      contractId,
+      organizationId,
+      actor.email,
+      actor.name,
+      note || undefined,
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath(`/contracts/${contractId}`);
@@ -395,7 +484,18 @@ export async function activateContractAction(contractId: string) {
     throw new Error("Support users cannot activate contracts.");
   }
 
-  markContractActive(contractId, actor.name, actor.email);
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+
+  if (allowMemoryPersistence()) {
+    markContractActive(contractId, actor.name, actor.email);
+  } else {
+    await markContractActiveAndPersist(
+      contractId,
+      organizationId,
+      actor.name,
+      actor.email,
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath(`/contracts/${contractId}`);
@@ -406,7 +506,7 @@ export async function addContractAttachmentAction(
   input: ContractIntakeAttachmentInput,
 ) {
   const actor = await getActor();
-  requireCanViewContract(contractId, actor.email);
+  await requireCanViewContract(contractId, actor.email);
 
   if (!canManageContractDocuments(actor.email)) {
     throw new Error("You do not have permission to upload contract documents.");
@@ -420,7 +520,18 @@ export async function addContractAttachmentAction(
     throw new Error("Attached documents must be 10 MB or smaller.");
   }
 
-  addContractAttachment(contractId, input, actor);
+  const organizationId = await resolveOrganizationIdForContract(contractId);
+
+  if (allowMemoryPersistence()) {
+    addContractAttachment(contractId, input, actor);
+  } else {
+    await addContractAttachmentAndPersist(
+      contractId,
+      organizationId,
+      input,
+      actor,
+    );
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/legal/dashboard");
@@ -434,7 +545,7 @@ export async function addContractEmailAction(
   input: AddContractEmailInput,
 ) {
   const actor = await getActor();
-  requireCanViewContract(contractId, actor.email);
+  await requireCanViewContract(contractId, actor.email);
 
   if (isSupportEmail(actor.email)) {
     throw new Error("Support users can upload documents but cannot add related emails.");
@@ -456,11 +567,7 @@ export async function addContractEmailAction(
     }
   }
 
-  const organizationId = await resolveContractOrganizationId(contractId);
-
-  if (!organizationId) {
-    throw new Error("Contract not found.");
-  }
+  const organizationId = await resolveOrganizationIdForContract(contractId);
 
   await addContractEmailAndPersist(
     contractId,

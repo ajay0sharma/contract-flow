@@ -38,7 +38,7 @@ async function requireAdmin() {
 
 export async function saveWorkflowConfigAction(config: WorkflowConfig) {
   await requireAdmin();
-  updateWorkflowConfig(config);
+  await updateWorkflowConfig(config);
 
   revalidatePath("/admin/dashboard");
   revalidatePath("/admin/workflow");
@@ -50,7 +50,7 @@ export async function saveWorkflowConfigAction(config: WorkflowConfig) {
 
 export async function saveWorkflowPolicyAction(policy: WorkflowPolicy) {
   await requireAdmin();
-  updateWorkflowPolicy(policy);
+  await updateWorkflowPolicy(policy);
 
   revalidatePath("/admin/dashboard");
   revalidatePath("/admin/policies");
@@ -74,7 +74,7 @@ export async function createPlatformUserAction(input: {
     lastName: input.lastName,
   });
 
-  upsertPlatformUser({
+  await upsertPlatformUser({
     email: input.email,
     name: `${input.firstName} ${input.lastName}`.trim(),
     role: input.role,
@@ -92,7 +92,7 @@ export async function createPlatformUserAction(input: {
 
 export async function updateUserRoleAction(email: string, role: PlatformRole) {
   await requireAdmin();
-  updatePlatformUserRole(email, role);
+  await updatePlatformUserRole(email, role);
   revalidatePath("/admin/dashboard");
   revalidatePath("/admin/users");
 }
