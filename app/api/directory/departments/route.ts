@@ -1,10 +1,10 @@
-import { NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminOrganizationId } from "@/lib/organization-context";
 import { getAllDepartments } from "@/lib/directory-sync";
 import { requireAuthenticatedActor } from "@/lib/directory-route-utils";
 import { reportError } from "@/lib/error-reporting";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await requireAuthenticatedActor();
 
   if ("response" in auth) {
@@ -12,7 +12,15 @@ export async function GET() {
   }
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
+    const organizationId = await requireAdminOrganizationId(
+      auth.actorEmail,
+      request,
+    );
+
+    if (organizationId instanceof NextResponse) {
+      return organizationId;
+    }
+
     const departments = await getAllDepartments(organizationId);
 
     return NextResponse.json(departments);

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { requireAdminOrganizationId } from "@/lib/organization-context";
 import { searchDirectoryUsers } from "@/lib/directory-sync";
 import { reportError } from "@/lib/error-reporting";
 import { requireAuthenticatedActor } from "@/lib/directory-route-utils";
@@ -25,7 +25,15 @@ export async function GET(request: NextRequest) {
   const limit = parseLimit(request.nextUrl.searchParams.get("limit"));
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
+    const organizationId = await requireAdminOrganizationId(
+      auth.actorEmail,
+      request,
+    );
+
+    if (organizationId instanceof NextResponse) {
+      return organizationId;
+    }
+
     const users = await searchDirectoryUsers(organizationId, query, limit);
 
     return NextResponse.json(

@@ -23,6 +23,12 @@ interface DirectoryConfigUpdateBody {
   isEnabled?: boolean;
 }
 
+function hasNonEmptyCredentialValues(
+  credentials: Record<string, string>,
+): boolean {
+  return Object.values(credentials).some((value) => value.trim().length > 0);
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAdminOrganizationActor(request);
 
@@ -105,7 +111,9 @@ export async function PUT(request: NextRequest) {
 
     if (
       !existing &&
-      (!body.credentials || Object.keys(body.credentials).length === 0)
+      (!body.credentials ||
+        !isRecord(body.credentials) ||
+        !hasNonEmptyCredentialValues(body.credentials))
     ) {
       return NextResponse.json(
         { error: "credentials are required when creating directory config." },
@@ -113,10 +121,16 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const encryptedCredentials =
-      body.credentials && Object.keys(body.credentials).length > 0
-        ? encryptCredentials(body.credentials)
-        : existing?.encryptedCredentials ?? encryptCredentials({});
+    const credentialsUpdate =
+      body.credentials &&
+      isRecord(body.credentials) &&
+      hasNonEmptyCredentialValues(body.credentials)
+        ? body.credentials
+        : null;
+
+    const encryptedCredentials = credentialsUpdate
+      ? encryptCredentials(credentialsUpdate)
+      : (existing?.encryptedCredentials ?? encryptCredentials({}));
 
     const record = await prisma.directoryIntegrationConfig.upsert({
       where: { organizationId },
@@ -133,9 +147,7 @@ export async function PUT(request: NextRequest) {
       update: {
         provider: body.provider,
         displayName: body.displayName.trim(),
-        ...(body.credentials !== undefined && body.credentials !== null
-          ? { encryptedCredentials }
-          : {}),
+        ...(credentialsUpdate ? { encryptedCredentials } : {}),
         autoSyncEnabled: body.autoSyncEnabled ?? true,
         autoSyncIntervalHours: body.autoSyncIntervalHours ?? 24,
         scopeFilter: body.scopeFilter ?? undefined,

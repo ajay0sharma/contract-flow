@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { requireAdminOrganizationId } from "@/lib/organization-context";
 import { getAllUsers } from "@/lib/directory-sync";
-import {
-  requireAdminActor,
-  requirePrivilegedActor,
-} from "@/lib/directory-route-utils";
+import { requirePrivilegedActor } from "@/lib/directory-route-utils";
 import { reportError } from "@/lib/error-reporting";
 
 function parseActiveOnly(value: string | null): boolean {
@@ -14,27 +10,6 @@ function parseActiveOnly(value: string | null): boolean {
   }
 
   return value.trim().toLowerCase() !== "false";
-}
-
-async function resolveDirectoryOrganizationId(
-  request: NextRequest,
-): Promise<string | NextResponse> {
-  const adminAuth = await requireAdminActor();
-
-  if ("response" in adminAuth) {
-    return resolveClauseLibraryOrganizationId();
-  }
-
-  const organizationId = await requireAdminOrganizationId(
-    adminAuth.actorEmail,
-    request,
-  );
-
-  if (organizationId instanceof NextResponse) {
-    return organizationId;
-  }
-
-  return organizationId;
 }
 
 export async function GET(request: NextRequest) {
@@ -50,7 +25,10 @@ export async function GET(request: NextRequest) {
   );
 
   try {
-    const organizationId = await resolveDirectoryOrganizationId(request);
+    const organizationId = await requireAdminOrganizationId(
+      auth.actorEmail,
+      request,
+    );
 
     if (organizationId instanceof NextResponse) {
       return organizationId;

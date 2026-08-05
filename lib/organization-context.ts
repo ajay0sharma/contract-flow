@@ -111,11 +111,5 @@ export async function requireAdminOrganizationId(
 export async function getOrganizationIdsForActor(
   email: string,
 ): Promise<string[]> {
-  const accessible = await getAccessibleOrganizationIds(email);
-
-  if (accessible.length > 0) {
-    return accessible;
-  }
-
-  return getAllowedOrganizationIds();
+  return getAccessibleOrganizationIds(email);
 }

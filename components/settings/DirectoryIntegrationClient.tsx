@@ -378,6 +378,7 @@ export function DirectoryIntegrationClient({
   const [usersPage, setUsersPage] = useState(1);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const configured = isConfigured(config);
 
@@ -388,12 +389,32 @@ export function DirectoryIntegrationClient({
     [serviceAccountJson],
   );
 
+  function resetCredentialFields(): void {
+    setTenantId("");
+    setClientId("");
+    setClientSecret("");
+    setShowClientSecret(false);
+    setServiceAccountJson("");
+    setAdminEmail("");
+    setWorkspaceDomain("");
+    setTestResult(null);
+    setTestPassed(false);
+  }
+
   const loadConfig = useCallback(async () => {
     const response = await fetch(directoryApiPath("/api/directory/config", organizationId), {
       cache: "no-store",
     });
-    const data = (await response.json()) as DirectoryConfigResponse;
+    const data = (await response.json()) as DirectoryConfigResponse & {
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(data.error ?? "Failed to load directory configuration.");
+    }
+
     setConfig(data);
+    setLoadError(null);
 
     if (isConfigured(data)) {
       setProvider(data.provider);
@@ -403,6 +424,11 @@ export function DirectoryIntegrationClient({
       setScopeDomain(scope.domain);
       setDepartmentTags(scope.departments);
       setSetupExpanded(false);
+      setTestPassed(
+        data.lastSyncStatus === "success" || data.lastSyncStatus === "syncing",
+      );
+    } else {
+      resetCredentialFields();
     }
 
     return data;
@@ -425,12 +451,26 @@ export function DirectoryIntegrationClient({
   }, [organizationId]);
 
   useEffect(() => {
+    setLoadingConfig(true);
+    setLoadError(null);
+    resetCredentialFields();
+    setUsers([]);
+    setSaveMessage(null);
+    setSaveProgress("idle");
+
     void (async () => {
       try {
         const data = await loadConfig();
         if (isConfigured(data) && data.lastSyncStatus === "success") {
           await loadUsers();
         }
+      } catch (error) {
+        setConfig(null);
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load directory configuration.",
+        );
       } finally {
         setLoadingConfig(false);
       }
@@ -451,6 +491,22 @@ export function DirectoryIntegrationClient({
       adminEmail: adminEmail.trim(),
       domain: workspaceDomain.trim(),
     };
+  }
+
+  function buildCredentialPayload(): Record<string, string> | undefined {
+    const credentials = Object.fromEntries(
+      Object.entries(buildCredentials()).filter(([, value]) => value.length > 0),
+    );
+
+    return Object.keys(credentials).length > 0 ? credentials : undefined;
+  }
+
+  function canSaveConfiguration(): boolean {
+    if (testPassed) {
+      return true;
+    }
+
+    return configured && isConfigured(config);
   }
 
   function buildScopeFilter() {
@@ -511,7 +567,9 @@ export function DirectoryIntegrationClient({
           body: JSON.stringify({
             provider,
             displayName: buildDisplayName(provider, workspaceDomain),
-            credentials: buildCredentials(),
+            ...(buildCredentialPayload()
+              ? { credentials: buildCredentialPayload() }
+              : {}),
             autoSyncEnabled,
             autoSyncIntervalHours,
             scopeFilter: buildScopeFilter(),
@@ -710,6 +768,12 @@ export function DirectoryIntegrationClient({
 
   return (
     <div className="space-y-8">
+      {loadError ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+          {loadError}
+        </div>
+      ) : null}
+
       {renderStatusCard()}
 
       <section className="rounded-xl border border-slate-200 bg-white p-6">
@@ -1117,7 +1181,11 @@ export function DirectoryIntegrationClient({
           <button
             type="button"
             onClick={() => void handleSaveAndSync()}
-            disabled={!testPassed || saveProgress === "saving" || saveProgress === "syncing"}
+            disabled={
+              !canSaveConfiguration() ||
+              saveProgress === "saving" ||
+              saveProgress === "syncing"
+            }
             className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
           >
             {saveProgress === "saving" || saveProgress === "syncing" ? (
