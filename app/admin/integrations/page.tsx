@@ -3,30 +3,44 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { NavIcon } from "@/components/layout/NavIcon";
 import { requireAdminOrganizationPageContext } from "@/lib/admin-organization-page";
 import { getDirectoryConfig } from "@/lib/directory-sync";
+import { getOrganizationEmailConfig } from "@/lib/organization-email-config";
 import { getPoConfig } from "@/lib/po-integration";
 
 export default async function AdminIntegrationsPage() {
   const { organizationId, organizations } =
     await requireAdminOrganizationPageContext();
-  const [poConfig, directoryConfig] = await Promise.all([
+  const [poConfig, directoryConfig, emailConfig] = await Promise.all([
     getPoConfig(organizationId),
     getDirectoryConfig(organizationId),
+    getOrganizationEmailConfig(organizationId),
   ]);
 
+  const emailConfigured =
+    emailConfig.mailboxEmails.length > 0 ||
+    Boolean(emailConfig.outboundWebhookUrl) ||
+    emailConfig.hasWebhookSecret;
+
   const integrations = [
+    {
+      title: "Email integration",
+      description: "Configure inbound and outbound contract email for this client",
+      href: "/admin/email",
+      icon: "mail" as const,
+      connected: emailConfigured,
+    },
+    {
+      title: "User directory",
+      description: "Sync Microsoft 365 or Google Workspace users",
+      href: "/admin/directory",
+      icon: "users-group" as const,
+      connected: Boolean(directoryConfig?.isEnabled),
+    },
     {
       title: "Purchase order integration",
       description: "Connect Coupa, SAP, Prendio or other PO systems",
       href: "/settings/po-integration",
       icon: "plug" as const,
       connected: Boolean(poConfig?.isEnabled),
-    },
-    {
-      title: "User directory",
-      description: "Sync Microsoft 365 or Google Workspace users",
-      href: "/settings/directory",
-      icon: "users-group" as const,
-      connected: Boolean(directoryConfig?.isEnabled),
     },
   ];
 
@@ -37,7 +51,7 @@ export default async function AdminIntegrationsPage() {
       organizations={organizations}
       activeOrganizationId={organizationId}
     >
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {integrations.map((integration) => (
           <Link
             key={integration.href}

@@ -24,6 +24,7 @@ export type NavIconName =
   | "building"
   | "git-branch"
   | "plug"
+  | "mail"
   | "shield-lock"
   | "users-group"
   | "search";
@@ -138,7 +139,7 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
           label: "Policies",
           icon: "shield-lock",
         },
-        { href: "/settings/directory", label: "Directory", icon: "users-group" },
+        { href: "/admin/directory", label: "Directory", icon: "users-group" },
       ],
     },
   ],

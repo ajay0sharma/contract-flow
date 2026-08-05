@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DirectoryProvider } from "@/lib/generated/prisma/enums";
 import type { DirectoryUserData } from "@/lib/directory-types";
+import { withAdminOrganizationQuery } from "@/lib/admin-api-path";
 
 type PublicDirectoryConfig = {
   provider: DirectoryProvider;
@@ -38,6 +39,18 @@ type TestResult = {
 };
 
 type SaveProgress = "idle" | "saving" | "syncing" | "complete";
+
+interface DirectoryIntegrationClientProps {
+  organizationId?: string;
+}
+
+function directoryApiPath(path: string, organizationId?: string): string {
+  if (!organizationId) {
+    return path;
+  }
+
+  return withAdminOrganizationQuery(path, organizationId);
+}
 
 const SUGGESTED_APP_NAME = "Your Company Contract System";
 const SYNC_INTERVAL_OPTIONS = [
@@ -334,7 +347,9 @@ function UsersPreviewTable({
   );
 }
 
-export function DirectoryIntegrationClient() {
+export function DirectoryIntegrationClient({
+  organizationId,
+}: DirectoryIntegrationClientProps = {}) {
   const [config, setConfig] = useState<DirectoryConfigResponse | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [provider, setProvider] = useState<DirectoryProvider>("microsoft");
@@ -374,7 +389,9 @@ export function DirectoryIntegrationClient() {
   );
 
   const loadConfig = useCallback(async () => {
-    const response = await fetch("/api/directory/config", { cache: "no-store" });
+    const response = await fetch(directoryApiPath("/api/directory/config", organizationId), {
+      cache: "no-store",
+    });
     const data = (await response.json()) as DirectoryConfigResponse;
     setConfig(data);
 
@@ -389,12 +406,15 @@ export function DirectoryIntegrationClient() {
     }
 
     return data;
-  }, []);
+  }, [organizationId]);
 
   const loadUsers = useCallback(async () => {
-    const response = await fetch("/api/directory/users?activeOnly=false", {
+    const response = await fetch(
+      directoryApiPath("/api/directory/users?activeOnly=false", organizationId),
+      {
       cache: "no-store",
-    });
+      },
+    );
 
     if (!response.ok) {
       return;
@@ -402,7 +422,7 @@ export function DirectoryIntegrationClient() {
 
     const data = (await response.json()) as DirectoryUserRecord[];
     setUsers(data);
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     void (async () => {
@@ -483,19 +503,22 @@ export function DirectoryIntegrationClient() {
     setSaveMessage("Saving...");
 
     try {
-      const saveResponse = await fetch("/api/directory/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider,
-          displayName: buildDisplayName(provider, workspaceDomain),
-          credentials: buildCredentials(),
-          autoSyncEnabled,
-          autoSyncIntervalHours,
-          scopeFilter: buildScopeFilter(),
-          isEnabled: true,
-        }),
-      });
+      const saveResponse = await fetch(
+        directoryApiPath("/api/directory/config", organizationId),
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider,
+            displayName: buildDisplayName(provider, workspaceDomain),
+            credentials: buildCredentials(),
+            autoSyncEnabled,
+            autoSyncIntervalHours,
+            scopeFilter: buildScopeFilter(),
+            isEnabled: true,
+          }),
+        },
+      );
 
       if (!saveResponse.ok) {
         throw new Error("Failed to save directory configuration.");
@@ -504,9 +527,12 @@ export function DirectoryIntegrationClient() {
       setSaveProgress("syncing");
       setSaveMessage("Syncing users...");
 
-      const syncResponse = await fetch("/api/directory/sync", {
-        method: "POST",
-      });
+      const syncResponse = await fetch(
+        directoryApiPath("/api/directory/sync", organizationId),
+        {
+          method: "POST",
+        },
+      );
       const syncResult = (await syncResponse.json()) as {
         success: boolean;
         totalUsers: number;
@@ -536,7 +562,10 @@ export function DirectoryIntegrationClient() {
     setSaveMessage(null);
 
     try {
-      const response = await fetch("/api/directory/sync", { method: "POST" });
+      const response = await fetch(
+        directoryApiPath("/api/directory/sync", organizationId),
+        { method: "POST" },
+      );
       const result = (await response.json()) as {
         success: boolean;
         error: string | null;

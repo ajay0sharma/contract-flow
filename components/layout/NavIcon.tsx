@@ -143,6 +143,13 @@ export function NavIcon({ name, className = "h-[18px] w-[18px]" }: NavIconProps)
           <path d="M7 8h10v4a5 5 0 0 1-10 0V8z" />
         </svg>
       );
+    case "mail":
+      return (
+        <svg {...props}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3 7 9 6 9-6" />
+        </svg>
+      );
     case "shield-lock":
       return (
         <svg {...props}>

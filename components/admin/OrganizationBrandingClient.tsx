@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBranding } from "@/components/providers/BrandingProvider";
 import { inputClassName } from "@/components/ui/FormField";
+import { withAdminOrganizationQuery } from "@/lib/admin-api-path";
 import type { OrganizationBrandingView } from "@/types/organization-branding";
 
 const ACCEPTED_LOGO_TYPES =
@@ -35,7 +36,7 @@ export function OrganizationBrandingClient({
 
     try {
       const response = await fetch(
-        `/api/admin/branding?organizationId=${encodeURIComponent(organizationId)}`,
+        withAdminOrganizationQuery("/api/admin/branding", organizationId),
         { cache: "no-store" },
       );
 
@@ -77,7 +78,9 @@ export function OrganizationBrandingClient({
     setSuccessMessage(null);
 
     try {
-      const response = await fetch("/api/admin/branding", {
+      const response = await fetch(
+        withAdminOrganizationQuery("/api/admin/branding", organizationId),
+        {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -85,7 +88,8 @@ export function OrganizationBrandingClient({
           tagline: tagline.trim() || null,
           accentColor: accentColor.trim() || null,
         }),
-      });
+        },
+      );
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as {
@@ -118,10 +122,13 @@ export function OrganizationBrandingClient({
       const formData = new FormData();
       formData.append("logo", file);
 
-      const response = await fetch("/api/admin/branding", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        withAdminOrganizationQuery("/api/admin/branding", organizationId),
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as {
@@ -154,10 +161,13 @@ export function OrganizationBrandingClient({
       const formData = new FormData();
       formData.append("action", "remove-logo");
 
-      const response = await fetch("/api/admin/branding", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        withAdminOrganizationQuery("/api/admin/branding", organizationId),
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as {

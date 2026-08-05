@@ -170,6 +170,30 @@ export default async function AdminDashboardPage() {
           </li>
           <li>
             <Link
+              href="/admin/integrations"
+              className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
+            >
+              Manage client integrations
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/admin/email"
+              className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
+            >
+              Configure email integration
+            </Link>
+          </li>
+          <li>
+            <Link
+              href="/admin/directory"
+              className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
+            >
+              Configure user directory
+            </Link>
+          </li>
+          <li>
+            <Link
               href="/settings/po-integration"
               className="block rounded-md border border-stone-200 px-4 py-3 text-sm font-medium text-stone-900 hover:bg-stone-50"
             >

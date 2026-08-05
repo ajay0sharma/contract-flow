@@ -13,8 +13,9 @@ const navLinks = [
 ];
 
 const integrationLinks = [
+  { href: "/admin/email", label: "Email integration" },
+  { href: "/admin/directory", label: "User directory" },
   { href: "/settings/po-integration", label: "PO integration" },
-  { href: "/settings/directory", label: "User directory" },
 ];
 
 const adminLinks = [

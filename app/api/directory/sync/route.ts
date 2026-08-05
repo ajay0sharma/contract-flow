@@ -1,21 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { requireAdminOrganizationActor } from "@/lib/admin-organization-api";
 import { syncDirectoryUsers } from "@/lib/directory-sync";
-import { requireAdminActor } from "@/lib/directory-route-utils";
 import { reportError } from "@/lib/error-reporting";
 
-export async function POST() {
-  const auth = await requireAdminActor();
+export async function POST(request: NextRequest) {
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
   }
 
-  const { actorEmail, actorName } = auth;
+  const { actorEmail, actorName, organizationId } = auth;
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
     const result = await syncDirectoryUsers(organizationId);
 
     await writeAuditLog({

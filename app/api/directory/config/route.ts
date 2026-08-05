@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import type { DirectoryProvider } from "@/lib/generated/prisma/enums";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { writeAuditLog } from "@/lib/audit-log";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { requireAdminOrganizationActor } from "@/lib/admin-organization-api";
 import { getDirectoryConfig } from "@/lib/directory-sync";
 import {
   DIRECTORY_PROVIDERS,
   isRecord,
-  requireAdminActor,
   toPublicDirectoryConfig,
 } from "@/lib/directory-route-utils";
 import { reportError } from "@/lib/error-reporting";
@@ -24,16 +23,15 @@ interface DirectoryConfigUpdateBody {
   isEnabled?: boolean;
 }
 
-export async function GET() {
-  const auth = await requireAdminActor();
+export async function GET(request: NextRequest) {
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
   }
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
-    const config = await getDirectoryConfig(organizationId);
+    const config = await getDirectoryConfig(auth.organizationId);
 
     if (!config) {
       return NextResponse.json({ configured: false });
@@ -50,13 +48,13 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
   }
 
-  const { actorEmail, actorName } = auth;
+  const { actorEmail, actorName, organizationId } = auth;
 
   let body: DirectoryConfigUpdateBody;
 
@@ -100,7 +98,6 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
     const prisma = getPrismaClient();
     const existing = await prisma.directoryIntegrationConfig.findUnique({
       where: { organizationId },
