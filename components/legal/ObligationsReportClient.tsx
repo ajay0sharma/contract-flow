@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { formatContractDate } from "@/lib/format-dates";
 import {
   OBLIGATION_TYPE_COLORS,
@@ -320,7 +321,7 @@ export function ObligationsReportClient() {
     }
   }, [queryString]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadObligations();
   }, [loadObligations]);
 

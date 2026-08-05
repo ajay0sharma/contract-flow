@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import type { DirectoryProvider } from "@/lib/generated/prisma/enums";
 import type { DirectoryUserData } from "@/lib/directory-types";
 import { withAdminOrganizationQuery } from "@/lib/admin-api-path";
@@ -450,7 +451,7 @@ export function DirectoryIntegrationClient({
     setUsers(data);
   }, [organizationId]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setLoadingConfig(true);
     setLoadError(null);
     resetCredentialFields();

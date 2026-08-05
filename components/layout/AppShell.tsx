@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { SignOutButton, useUser } from "@clerk/nextjs";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { NavIcon } from "@/components/layout/NavIcon";
 import { AppHeaderBrand, useBranding } from "@/components/providers/BrandingProvider";
 import { useTier } from "@/components/providers/TierProvider";
@@ -69,11 +70,11 @@ export function AppShell({ children }: AppShellProps) {
   const [pendingCount, setPendingCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setHasMounted(true);
   }, []);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setMobileNavOpen(false);
   }, [pathname, searchParams]);
 

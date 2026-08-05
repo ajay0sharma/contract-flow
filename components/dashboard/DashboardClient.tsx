@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { useUser } from "@clerk/nextjs";
 import { NavIcon } from "@/components/layout/NavIcon";
 import { StageBadge } from "@/components/contracts/StageBadge";
@@ -128,11 +129,11 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
     }
   }, []);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setHasMounted(true);
   }, []);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { formatContractDate } from "@/lib/format-dates";
 import {
   OBLIGATION_TYPE_LABELS,
@@ -164,7 +165,7 @@ export function ContractObligationsCard({ contractId }: ContractObligationsCardP
     }
   }, [contractId]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadPanel();
   }, [loadPanel]);
 

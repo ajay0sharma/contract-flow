@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { useTier } from "@/components/providers/TierProvider";
 import { isAdminEmail } from "@/lib/legal-access";
 
@@ -34,7 +35,7 @@ export function SettingsNav({
   const { tokens } = useTier();
   const [hasMounted, setHasMounted] = useState(false);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setHasMounted(true);
   }, []);
 

@@ -5,11 +5,11 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import type { OrganizationBrandingView } from "@/types/organization-branding";
 import { DEFAULT_ORGANIZATION_BRANDING } from "@/types/organization-branding";
 
@@ -54,7 +54,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void refreshBranding();
   }, [refreshBranding]);
 

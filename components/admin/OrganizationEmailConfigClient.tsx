@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { inputClassName } from "@/components/ui/FormField";
 import { withAdminOrganizationQuery } from "@/lib/admin-api-path";
 
@@ -76,7 +77,7 @@ export function OrganizationEmailConfigClient({
     }
   }, [applyConfig, organizationId]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadConfig();
   }, [loadConfig]);
 

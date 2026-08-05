@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import type { ContractTypeRecord } from "@/types/contract-template";
 import { inputClassName, selectClassName } from "@/components/ui/FormField";
 
@@ -59,7 +60,7 @@ export function ContractTypeSelect({
     }
   }, [organizationId, onContractTypesChange]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (initialContractTypes.length === 0) {
       void refreshContractTypes();
     }

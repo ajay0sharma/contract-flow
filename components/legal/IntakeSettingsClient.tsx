@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import type {
   ContractTemplateRecord,
   ContractTypeRecord,
@@ -82,7 +83,7 @@ export function IntakeSettingsClient() {
     }
   }, []);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadConfiguration();
   }, [loadConfiguration]);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import {
   FormField,
   inputClassName,
@@ -73,7 +74,7 @@ export function ClauseFormPanel({
 }: ClauseFormPanelProps) {
   const [values, setValues] = useState<ClauseFormValues>(emptyValues);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (!open) {
       return;
     }

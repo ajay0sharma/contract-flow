@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { useBranding } from "@/components/providers/BrandingProvider";
 import { inputClassName } from "@/components/ui/FormField";
 import { withAdminOrganizationQuery } from "@/lib/admin-api-path";
@@ -61,7 +62,7 @@ export function OrganizationBrandingClient({
     }
   }, [organizationId]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadBranding();
   }, [loadBranding]);
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { PageShell } from "@/components/PageShell";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
 import { StageBadge } from "@/components/contracts/StageBadge";
@@ -732,7 +733,7 @@ export function ContractDetailClient({
     }
   }, [contractId]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadContract();
   }, [loadContract]);
 

@@ -1,28 +1,27 @@
-import { defineConfig, globalIgnores } from "eslint/config";
+import { globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
-const eslintConfig = defineConfig([
+const eslintConfig = [
   ...nextVitals,
   ...nextTs,
-  {
-    rules: {
-      // Common patterns such as fetch-on-mount and SSR hydration guards.
-      "react-hooks/set-state-in-effect": "off",
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        { argsIgnorePattern: "^_" },
-      ],
-    },
-  },
-  // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
   ]),
-]);
+  {
+    files: ["**/*.{js,mjs,cjs,jsx,ts,tsx}"],
+    rules: {
+      // Fetch-on-mount and SSR hydration guards are intentional in this app.
+      "react-hooks/set-state-in-effect": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
+];
 
 export default eslintConfig;

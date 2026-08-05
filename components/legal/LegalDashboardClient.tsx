@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { ApprovalReassignDialog } from "@/components/contracts/ApprovalReassignDialog";
 import { IntakeSettingsClient } from "@/components/legal/IntakeSettingsClient";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
@@ -299,7 +300,7 @@ export function LegalDashboardClient({
   const [pickupPendingId, setPickupPendingId] = useState<string | null>(null);
   const [approvalNote, setApprovalNote] = useState("");
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab]);
 
@@ -440,12 +441,12 @@ export function LegalDashboardClient({
     [loadDatabase, loadMetrics, loadPending],
   );
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadMetrics();
     void loadPending(true);
   }, [loadMetrics, loadPending]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (activeTab !== "all") {
       return;
     }

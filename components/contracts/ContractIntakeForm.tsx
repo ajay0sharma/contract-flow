@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { createCounterpartyForIntakeAction } from "@/app/actions/contracts";
 import { recordContractDraftGeneratedAction } from "@/app/actions/template-audit";
 import {
@@ -505,7 +506,7 @@ export function ContractIntakeForm({
     }
   }
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (!selectedTemplate || selectedTemplateId) {
       return;
     }
@@ -517,7 +518,6 @@ export function ContractIntakeForm({
       ),
     );
     // Sync template variables when intake field values change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- form is intentionally decomposed
   }, [
     selectedTemplate,
     selectedTemplateId,

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { openTemplateDocument } from "@/lib/template-file-access";
 import {
   TemplateEditor,
@@ -343,7 +344,7 @@ export function ContractTemplatesClient({
   const [deletePrompt, setDeletePrompt] =
     useState<ContractTemplateRecord | null>(null);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setTemplates((current) => {
       if (initialTemplates.length === 0) {
         return current;

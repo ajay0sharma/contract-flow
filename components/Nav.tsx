@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignOutButton, useUser } from "@clerk/nextjs";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import {
   getHomePathForEmail,
   isAdminEmail,
@@ -43,7 +44,7 @@ export function Nav() {
   const { user } = useUser();
   const [hasMounted, setHasMounted] = useState(false);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setHasMounted(true);
   }, []);
 

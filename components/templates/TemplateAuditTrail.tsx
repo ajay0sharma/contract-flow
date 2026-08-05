@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 
 interface TemplateAuditEntry {
   id: string;
@@ -85,7 +86,7 @@ export function TemplateAuditTrail({
     }
   }, [templateId]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadAuditTrail();
   }, [loadAuditTrail, refreshKey]);
 

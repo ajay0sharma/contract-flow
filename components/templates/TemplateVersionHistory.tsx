@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { openTemplateDocument } from "@/lib/template-file-access";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import type { TemplateVersionHistoryEntry } from "@/types/contract-template";
 
 interface TemplateVersionHistoryProps {
@@ -68,7 +69,7 @@ export function TemplateVersionHistory({
     }
   }, [templateId]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     void loadVersions();
   }, [loadVersions, refreshKey]);
 

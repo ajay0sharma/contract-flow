@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { inputClassName } from "@/components/ui/FormField";
 import { resolveContractRecordNumber } from "@/lib/record-id";
 import type { ContractRecord } from "@/types/contract";
@@ -67,7 +68,7 @@ export function ParentAgreementSearchField({
     return options.filter((contract) => matchesQuery(contract, query));
   }, [options, query]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setHighlightedIndex(0);
   }, [query, isOpen]);
 

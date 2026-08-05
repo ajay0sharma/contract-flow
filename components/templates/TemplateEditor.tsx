@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import {
   buildPlaceholderWarning,
   extractDocxPlaceholders,
@@ -163,7 +164,7 @@ export function TemplateEditor({
   const fileChanged =
     mode === "edit" && values.file !== null;
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (!open) {
       return;
     }
@@ -181,7 +182,7 @@ export function TemplateEditor({
     setFileError(null);
   }, [open, mode, initialTemplate]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (mode === "edit" && initialTemplate) {
       setHistoryRefreshKey((current) => current + 1);
     }

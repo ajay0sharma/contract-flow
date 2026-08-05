@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { AppShell } from "@/components/layout/AppShell";
@@ -19,7 +20,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const { user, isLoaded } = useUser();
   const [hasMounted, setHasMounted] = useState(false);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     setHasMounted(true);
   }, []);
 

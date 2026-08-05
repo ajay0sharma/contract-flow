@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
 import { getCurrentApprover } from "@/lib/workflow-engine";
 import type { ContractRecord } from "@/types/contract";
@@ -28,7 +29,7 @@ export function ApprovalReassignDialog({
 
   const currentApprover = contract ? getCurrentApprover(contract) : null;
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (!open) {
       setSelectedAssignee(null);
       setNote("");

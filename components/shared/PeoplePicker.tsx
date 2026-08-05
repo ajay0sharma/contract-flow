@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import {
   formatPersonSubtitle,
   getPersonInitials,
@@ -143,7 +144,7 @@ export function PeoplePicker({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, [closeDropdown, isOpen]);
 
-  useEffect(() => {
+  useDeferredEffect(() => {
     if (disabled || value) {
       setResults([]);
       setIsLoading(false);
