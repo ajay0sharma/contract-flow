@@ -7,25 +7,39 @@ import {
   cloneAndNormalizeWorkflowConfig,
   getDefaultWorkflowConfig,
 } from "@/lib/workflow-store-defaults";
+import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 
 const globalStore = globalThis as typeof globalThis & {
-  __workflowConfig?: WorkflowConfig;
+  __workflowConfigByOrg?: Map<string, WorkflowConfig>;
 };
 
-function getMemoryStore(): WorkflowConfig {
-  if (!globalStore.__workflowConfig) {
-    globalStore.__workflowConfig = getDefaultWorkflowConfig();
+function getMemoryStore(organizationId: string): WorkflowConfig {
+  if (!globalStore.__workflowConfigByOrg) {
+    globalStore.__workflowConfigByOrg = new Map();
   }
 
-  return cloneAndNormalizeWorkflowConfig(globalStore.__workflowConfig);
+  const existing = globalStore.__workflowConfigByOrg.get(organizationId);
+
+  if (!existing) {
+    globalStore.__workflowConfigByOrg.set(
+      organizationId,
+      getDefaultWorkflowConfig(),
+    );
+  }
+
+  return cloneAndNormalizeWorkflowConfig(
+    globalStore.__workflowConfigByOrg.get(organizationId)!,
+  );
 }
 
-export function getWorkflowConfig(): WorkflowConfig {
+export function getWorkflowConfig(
+  organizationId = DEFAULT_ORGANIZATION_ID,
+): WorkflowConfig {
   if (allowMemoryPersistence()) {
-    return getMemoryStore();
+    return getMemoryStore(organizationId);
   }
 
-  const cached = getCachedWorkflowConfig();
+  const cached = getCachedWorkflowConfig(organizationId);
   if (cached) {
     return cloneAndNormalizeWorkflowConfig(cached);
   }

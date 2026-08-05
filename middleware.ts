@@ -13,6 +13,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up",
   "/sign-up/(.*)",
   "/api/cron/(.*)",
+  "/api/health",
 ]);
 
 const businessOnlyPaths = ["/dashboard", "/contracts/new"];

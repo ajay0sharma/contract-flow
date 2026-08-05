@@ -5,28 +5,36 @@ import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import type { WorkflowConfig } from "@/lib/workflow-config-types";
 import {
   cloneAndNormalizeWorkflowConfig,
-  getDefaultWorkflowConfig,
 } from "@/lib/workflow-store-defaults";
 import { getWorkflowConfig } from "@/lib/workflow-config-read";
+import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 
 const globalStore = globalThis as typeof globalThis & {
-  __workflowConfig?: WorkflowConfig;
+  __workflowConfigByOrg?: Map<string, WorkflowConfig>;
 };
 
 export async function updateWorkflowConfig(
   config: WorkflowConfig,
+  organizationId = DEFAULT_ORGANIZATION_ID,
 ): Promise<WorkflowConfig> {
   const normalized = cloneAndNormalizeWorkflowConfig(config);
 
   if (allowMemoryPersistence()) {
-    globalStore.__workflowConfig = normalized;
-    return getWorkflowConfig();
+    if (!globalStore.__workflowConfigByOrg) {
+      globalStore.__workflowConfigByOrg = new Map();
+    }
+
+    globalStore.__workflowConfigByOrg.set(organizationId, normalized);
+    return getWorkflowConfig(organizationId);
   }
 
   const { saveWorkflowConfigToDatabase } = await import("@/lib/platform-data-db");
-  await saveWorkflowConfigToDatabase(normalized);
-  setCachedWorkflowConfig(normalized);
+  await saveWorkflowConfigToDatabase(normalized, organizationId);
+  setCachedWorkflowConfig(organizationId, normalized);
   return cloneAndNormalizeWorkflowConfig(normalized);
 }
 
-export { getWorkflowConfig, getDefaultWorkflowConfig } from "@/lib/workflow-config-read";
+export {
+  getDefaultWorkflowConfig,
+  getWorkflowConfig,
+} from "@/lib/workflow-config-read";

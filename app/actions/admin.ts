@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdminEmail } from "@/lib/access-control";
 import { getHomePathForEmail } from "@/lib/legal-access";
+import { requireOrganizationAccess } from "@/lib/organization-membership";
+import { resolveActiveOrganizationId } from "@/lib/organization-context";
 import type { PlatformRole } from "@/lib/platform-config";
 import {
   upsertPlatformUser,
@@ -36,9 +38,26 @@ async function requireAdmin() {
   };
 }
 
-export async function saveWorkflowConfigAction(config: WorkflowConfig) {
-  await requireAdmin();
-  await updateWorkflowConfig(config);
+async function requireAdminOrganization(organizationId?: string) {
+  const admin = await requireAdmin();
+  const resolvedOrganizationId = await resolveActiveOrganizationId(
+    admin.email,
+    organizationId,
+  );
+  await requireOrganizationAccess(admin.email, resolvedOrganizationId);
+
+  return {
+    ...admin,
+    organizationId: resolvedOrganizationId,
+  };
+}
+
+export async function saveWorkflowConfigAction(
+  config: WorkflowConfig,
+  organizationId?: string,
+) {
+  const admin = await requireAdminOrganization(organizationId);
+  await updateWorkflowConfig(config, admin.organizationId);
 
   revalidatePath("/admin/dashboard");
   revalidatePath("/admin/workflow");
@@ -48,9 +67,12 @@ export async function saveWorkflowConfigAction(config: WorkflowConfig) {
   revalidatePath("/dashboard");
 }
 
-export async function saveWorkflowPolicyAction(policy: WorkflowPolicy) {
-  await requireAdmin();
-  await updateWorkflowPolicy(policy);
+export async function saveWorkflowPolicyAction(
+  policy: WorkflowPolicy,
+  organizationId?: string,
+) {
+  const admin = await requireAdminOrganization(organizationId);
+  await updateWorkflowPolicy(policy, admin.organizationId);
 
   revalidatePath("/admin/dashboard");
   revalidatePath("/admin/policies");

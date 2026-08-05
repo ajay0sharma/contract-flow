@@ -12,16 +12,16 @@ import { WorkflowPolicyForm } from "@/components/admin/WorkflowPolicyForm";
 import {
   requireAdminPage,
 } from "@/app/actions/admin";
+import { requireAdminOrganizationPageContext } from "@/lib/admin-organization-page";
 import { adminDashboardSectionHref } from "@/lib/admin-dashboard-sections";
 import { loadAdminDashboardData } from "@/lib/admin-dashboard-data";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import {
   buildContractStatusCounts,
   listMergedContractRecords,
   sortContractRecords,
 } from "@/lib/contract-list-service";
 import { getPlatformUsers } from "@/lib/user-store";
-import { getWorkflowConfig } from "@/lib/workflow-config-read";
+import { ensureWorkflowConfigLoaded } from "@/lib/workflow-config-server";
 import {
   ensureDefaultIntakeForm,
   getActiveIntakeForm,
@@ -32,15 +32,16 @@ export default async function AdminDashboardPage() {
   const { ensurePlatformDataHydrated } = await import("@/lib/platform-data-db");
   await ensurePlatformDataHydrated();
 
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const { organizationId, organizations } =
+    await requireAdminOrganizationPageContext();
   const allContracts = await listMergedContractRecords(organizationId);
   const contracts = sortContractRecords(allContracts, "createdAt", "desc");
   const contractCounts = buildContractStatusCounts(allContracts);
   const pendingApprovals = contractCounts.draft + contractCounts.pending;
   const platformUsers = getPlatformUsers();
-  const workflow = getWorkflowConfig();
+  const workflow = await ensureWorkflowConfigLoaded(organizationId);
   const { policy, contractTypes, users, loadErrors } =
-    await loadAdminDashboardData();
+    await loadAdminDashboardData(organizationId);
   const intakeForm =
     (await getActiveIntakeForm(organizationId)) ??
     (await ensureDefaultIntakeForm(organizationId));
@@ -87,7 +88,8 @@ export default async function AdminDashboardPage() {
   return (
     <AdminShell
       title="Admin dashboard"
-      description="Default organization"
+      organizations={organizations}
+      activeOrganizationId={organizationId}
     >
       <Suspense fallback={null}>
         <AdminDashboardScrollManager />
@@ -231,7 +233,10 @@ export default async function AdminDashboardPage() {
             thresholds from the admin dashboard.
           </p>
         </div>
-        <WorkflowConfigForm initialConfig={workflow} />
+        <WorkflowConfigForm
+          initialConfig={workflow}
+          organizationId={organizationId}
+        />
       </section>
 
       <section id="workflow-policies" className="mt-10 scroll-mt-20">
@@ -244,7 +249,10 @@ export default async function AdminDashboardPage() {
             contracts.
           </p>
         </div>
-        <WorkflowPolicyForm initialPolicy={policy} />
+        <WorkflowPolicyForm
+          initialPolicy={policy}
+          organizationId={organizationId}
+        />
       </section>
 
       <section id="user-settings" className="mt-10 scroll-mt-20">

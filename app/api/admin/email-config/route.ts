@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
-import { resolveRequestedOrganizationId } from "@/lib/contract-email-org";
+import { requireAdminOrganizationActor } from "@/lib/admin-organization-api";
 import {
   getOrganizationEmailConfig,
   upsertOrganizationEmailConfig,
 } from "@/lib/organization-email-config";
 import { reportError } from "@/lib/error-reporting";
-import { requireAdminActor } from "@/lib/directory-route-utils";
 
 interface EmailConfigUpdateBody {
   organizationId?: string;
@@ -32,17 +31,14 @@ function toPublicEmailConfig(
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
   }
 
   try {
-    const organizationId = resolveRequestedOrganizationId(
-      request.nextUrl.searchParams.get("organizationId"),
-    );
-    const config = await getOrganizationEmailConfig(organizationId);
+    const config = await getOrganizationEmailConfig(auth.organizationId);
 
     return NextResponse.json(toPublicEmailConfig(config));
   } catch (error) {
@@ -55,7 +51,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -79,10 +75,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const organizationId = resolveRequestedOrganizationId(
-      body.organizationId ?? request.nextUrl.searchParams.get("organizationId"),
-    );
-    const updated = await upsertOrganizationEmailConfig(organizationId, {
+    const updated = await upsertOrganizationEmailConfig(auth.organizationId, {
       syncEnabled: body.syncEnabled,
       outboundWebhookUrl: body.outboundWebhookUrl,
       webhookSecret: body.webhookSecret,
@@ -90,13 +83,13 @@ export async function PUT(request: NextRequest) {
     });
 
     await writeAuditLog({
-      organizationId,
+      organizationId: auth.organizationId,
       entityType: "contract",
-      entityId: organizationId,
+      entityId: auth.organizationId,
       action: "organization_email_config_updated",
       actorEmail,
       actorName,
-      detail: `Updated email settings for client ${organizationId}.`,
+      detail: `Updated email settings for client ${auth.organizationId}.`,
       metadata: {
         syncEnabled: updated.syncEnabled,
         mailboxCount: updated.mailboxEmails.length,

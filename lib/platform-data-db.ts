@@ -232,11 +232,23 @@ export async function hydratePlatformDataFromDatabase(): Promise<void> {
   setCachedPlatformUsers(users.map(mapPlatformUser));
 
   if (settings) {
-    setCachedWorkflowConfig(settings.workflowConfig as unknown as WorkflowConfig);
-    setCachedWorkflowPolicy(settings.workflowPolicy as unknown as WorkflowPolicy);
+    setCachedWorkflowConfig(
+      DEFAULT_PLATFORM_ORGANIZATION_ID,
+      settings.workflowConfig as unknown as WorkflowConfig,
+    );
+    setCachedWorkflowPolicy(
+      DEFAULT_PLATFORM_ORGANIZATION_ID,
+      settings.workflowPolicy as unknown as WorkflowPolicy,
+    );
   } else {
-    setCachedWorkflowConfig(getDefaultWorkflowConfig());
-    setCachedWorkflowPolicy(defaultWorkflowPolicy);
+    setCachedWorkflowConfig(
+      DEFAULT_PLATFORM_ORGANIZATION_ID,
+      getDefaultWorkflowConfig(),
+    );
+    setCachedWorkflowPolicy(
+      DEFAULT_PLATFORM_ORGANIZATION_ID,
+      defaultWorkflowPolicy,
+    );
   }
 
   markPlatformDataHydrated();
@@ -295,6 +307,50 @@ export async function savePlatformUserToDatabase(user: PlatformUser): Promise<Pl
   return mapped;
 }
 
+export async function loadWorkflowSettingsFromDatabase(
+  organizationId: string,
+): Promise<{ config: WorkflowConfig; policy: WorkflowPolicy }> {
+  await ensurePlatformDataHydrated();
+
+  const cachedConfig = getCachedWorkflowConfig(organizationId);
+  const cachedPolicy = getCachedWorkflowPolicy(organizationId);
+
+  if (cachedConfig && cachedPolicy) {
+    return {
+      config: cloneWorkflowConfig(cachedConfig),
+      policy: { ...cachedPolicy },
+    };
+  }
+
+  const prisma = getPrismaClient();
+  const settings = await prisma.platformWorkflowSettings.findUnique({
+    where: { organizationId },
+  });
+
+  if (settings) {
+    const config = settings.workflowConfig as unknown as WorkflowConfig;
+    const policy = settings.workflowPolicy as unknown as WorkflowPolicy;
+    setCachedWorkflowConfig(organizationId, config);
+    setCachedWorkflowPolicy(organizationId, policy);
+    return {
+      config: cloneWorkflowConfig(config),
+      policy: { ...policy },
+    };
+  }
+
+  const defaults = {
+    config: getDefaultWorkflowConfig(),
+    policy: defaultWorkflowPolicy,
+  };
+  setCachedWorkflowConfig(organizationId, defaults.config);
+  setCachedWorkflowPolicy(organizationId, defaults.policy);
+  return defaults;
+}
+
+function cloneWorkflowConfig(config: WorkflowConfig): WorkflowConfig {
+  return JSON.parse(JSON.stringify(config)) as WorkflowConfig;
+}
+
 export async function saveWorkflowConfigToDatabase(
   config: WorkflowConfig,
   organizationId = DEFAULT_PLATFORM_ORGANIZATION_ID,
@@ -303,7 +359,7 @@ export async function saveWorkflowConfigToDatabase(
 
   const prisma = getPrismaClient();
   const policy =
-    getCachedWorkflowPolicy() ??
+    getCachedWorkflowPolicy(organizationId) ??
     ((await prisma.platformWorkflowSettings.findUnique({
       where: { organizationId },
     }))?.workflowPolicy as unknown as WorkflowPolicy | undefined) ??
@@ -321,7 +377,7 @@ export async function saveWorkflowConfigToDatabase(
     },
   });
 
-  setCachedWorkflowConfig(config);
+  setCachedWorkflowConfig(organizationId, config);
 }
 
 export async function saveWorkflowPolicyToDatabase(
@@ -332,7 +388,7 @@ export async function saveWorkflowPolicyToDatabase(
 
   const prisma = getPrismaClient();
   const config =
-    getCachedWorkflowConfig() ??
+    getCachedWorkflowConfig(organizationId) ??
     ((await prisma.platformWorkflowSettings.findUnique({
       where: { organizationId },
     }))?.workflowConfig as unknown as WorkflowConfig | undefined) ??
@@ -350,7 +406,7 @@ export async function saveWorkflowPolicyToDatabase(
     },
   });
 
-  setCachedWorkflowPolicy(policy);
+  setCachedWorkflowPolicy(organizationId, policy);
 }
 
 export async function loadCounterpartiesFromDatabase(

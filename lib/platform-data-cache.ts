@@ -4,8 +4,8 @@ import type { WorkflowConfig, WorkflowPolicy } from "@/lib/workflow-config-types
 
 const globalCache = globalThis as typeof globalThis & {
   __platformUsersCache?: PlatformUser[];
-  __workflowConfigCache?: WorkflowConfig;
-  __workflowPolicyCache?: WorkflowPolicy;
+  __workflowConfigCache?: Map<string, WorkflowConfig>;
+  __workflowPolicyCache?: Map<string, WorkflowPolicy>;
   __counterpartiesCache?: Map<string, CounterpartyProfile[]>;
   __platformDataHydrated?: boolean;
 };
@@ -26,20 +26,46 @@ export function setCachedPlatformUsers(users: PlatformUser[]): void {
   globalCache.__platformUsersCache = users;
 }
 
-export function getCachedWorkflowConfig(): WorkflowConfig | undefined {
+function ensureWorkflowConfigCache(): Map<string, WorkflowConfig> {
+  if (!globalCache.__workflowConfigCache) {
+    globalCache.__workflowConfigCache = new Map();
+  }
+
   return globalCache.__workflowConfigCache;
 }
 
-export function setCachedWorkflowConfig(config: WorkflowConfig): void {
-  globalCache.__workflowConfigCache = config;
-}
+function ensureWorkflowPolicyCache(): Map<string, WorkflowPolicy> {
+  if (!globalCache.__workflowPolicyCache) {
+    globalCache.__workflowPolicyCache = new Map();
+  }
 
-export function getCachedWorkflowPolicy(): WorkflowPolicy | undefined {
   return globalCache.__workflowPolicyCache;
 }
 
-export function setCachedWorkflowPolicy(policy: WorkflowPolicy): void {
-  globalCache.__workflowPolicyCache = policy;
+export function getCachedWorkflowConfig(
+  organizationId: string,
+): WorkflowConfig | undefined {
+  return ensureWorkflowConfigCache().get(organizationId);
+}
+
+export function setCachedWorkflowConfig(
+  organizationId: string,
+  config: WorkflowConfig,
+): void {
+  ensureWorkflowConfigCache().set(organizationId, config);
+}
+
+export function getCachedWorkflowPolicy(
+  organizationId: string,
+): WorkflowPolicy | undefined {
+  return ensureWorkflowPolicyCache().get(organizationId);
+}
+
+export function setCachedWorkflowPolicy(
+  organizationId: string,
+  policy: WorkflowPolicy,
+): void {
+  ensureWorkflowPolicyCache().set(organizationId, policy);
 }
 
 export function getCachedCounterparties(
@@ -70,4 +96,15 @@ export function invalidateCounterpartyCache(organizationId?: string): void {
   }
 
   globalCache.__counterpartiesCache.clear();
+}
+
+export function invalidateWorkflowCache(organizationId?: string): void {
+  if (organizationId) {
+    ensureWorkflowConfigCache().delete(organizationId);
+    ensureWorkflowPolicyCache().delete(organizationId);
+    return;
+  }
+
+  globalCache.__workflowConfigCache?.clear();
+  globalCache.__workflowPolicyCache?.clear();
 }

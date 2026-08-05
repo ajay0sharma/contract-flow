@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
-import { requireAdminActor } from "@/lib/directory-route-utils";
+import { requireAdminOrganizationActor } from "@/lib/admin-organization-api";
 import {
   getOrganizationBranding,
   removeOrganizationBrandingLogo,
@@ -11,21 +10,20 @@ import {
 import { reportError } from "@/lib/error-reporting";
 import { isSupabaseStorageConfigured } from "@/lib/supabase-storage";
 
-export async function GET() {
-  const auth = await requireAdminActor();
+export async function GET(request: NextRequest) {
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
   }
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
-    const branding = await getOrganizationBranding(organizationId);
+    const branding = await getOrganizationBranding(auth.organizationId);
     const view = await toOrganizationBrandingView(branding);
 
     return NextResponse.json({
       branding: view,
-      organizationId,
+      organizationId: auth.organizationId,
       storageConfigured: isSupabaseStorageConfigured(),
     });
   } catch (error) {
@@ -38,7 +36,7 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -57,8 +55,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
-    const result = await updateOrganizationBranding(organizationId, {
+    const result = await updateOrganizationBranding(auth.organizationId, {
       productName: body.productName,
       tagline: body.tagline,
       accentColor: body.accentColor,
@@ -84,7 +81,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -101,11 +98,9 @@ export async function POST(request: NextRequest) {
   const action = String(formData.get("action") ?? "upload");
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
-
     if (action === "remove-logo") {
       const result = await removeOrganizationBrandingLogo(
-        organizationId,
+        auth.organizationId,
         auth.actorEmail,
       );
 
@@ -130,7 +125,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await uploadOrganizationBrandingLogoFile(
-      organizationId,
+      auth.organizationId,
       file,
       auth.actorEmail,
     );

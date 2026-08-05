@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
-import { requireAdminActor } from "@/lib/directory-route-utils";
+import { requireAdminOrganizationActor } from "@/lib/admin-organization-api";
 import { reportError } from "@/lib/error-reporting";
 import {
   ensureDefaultIntakeForm,
@@ -10,23 +9,25 @@ import {
 } from "@/lib/intake-form-store";
 import type { SaveIntakeFormInput } from "@/types/intake-form";
 
-export async function GET() {
-  const auth = await requireAdminActor();
+export async function GET(request: NextRequest) {
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
   }
 
-  const organizationId = resolveClauseLibraryOrganizationId();
   const intakeForm =
-    (await getActiveIntakeForm(organizationId)) ??
-    (await ensureDefaultIntakeForm(organizationId));
+    (await getActiveIntakeForm(auth.organizationId)) ??
+    (await ensureDefaultIntakeForm(auth.organizationId));
 
-  return NextResponse.json({ intakeForm, organizationId });
+  return NextResponse.json({
+    intakeForm,
+    organizationId: auth.organizationId,
+  });
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -40,8 +41,6 @@ export async function PUT(request: NextRequest) {
     } catch {
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
-
-    const organizationId = resolveClauseLibraryOrganizationId();
 
     if (!Array.isArray(body.sections)) {
       return NextResponse.json(
@@ -69,7 +68,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const intakeForm = await saveIntakeForm({
-      organizationId,
+      organizationId: auth.organizationId,
       name: body.name,
       sections: body.sections,
     });
@@ -85,7 +84,7 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -104,8 +103,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unsupported action." }, { status: 400 });
     }
 
-    const organizationId = resolveClauseLibraryOrganizationId();
-    const intakeForm = await resetIntakeFormToDefaults(organizationId);
+    const intakeForm = await resetIntakeFormToDefaults(auth.organizationId);
 
     return NextResponse.json({ intakeForm });
   } catch (error) {

@@ -6,6 +6,7 @@ import type { WorkflowPolicy } from "@/lib/workflow-config-types";
 
 interface WorkflowPolicyFormProps {
   initialPolicy: WorkflowPolicy;
+  organizationId: string;
 }
 
 const policyFields: Array<{
@@ -39,7 +40,10 @@ const policyFields: Array<{
   },
 ];
 
-export function WorkflowPolicyForm({ initialPolicy }: WorkflowPolicyFormProps) {
+export function WorkflowPolicyForm({
+  initialPolicy,
+  organizationId,
+}: WorkflowPolicyFormProps) {
   const [policy, setPolicy] = useState(initialPolicy);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +60,7 @@ export function WorkflowPolicyForm({ initialPolicy }: WorkflowPolicyFormProps) {
 
     startTransition(async () => {
       try {
-        await saveWorkflowPolicyAction(policy);
+        await saveWorkflowPolicyAction(policy, organizationId);
         setMessage("Workflow policies saved.");
       } catch (submitError) {
         setError(

@@ -2,11 +2,9 @@ import { createId } from "@paralleldrive/cuid2";
 import { randomInt } from "node:crypto";
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import {
-  getAllowedOrganizationIds,
-  resolveClauseLibraryOrganizationId,
-} from "@/lib/clause-library-org";
+import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { isAdminEmail, isLegalEmail } from "@/lib/access-control";
+import { getOrganizationIdsForActor } from "@/lib/organization-context";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import { SAFE_API_ERROR_MESSAGE } from "@/lib/error-reporting";
 import type { ContractRecord } from "@/types/contract";
@@ -39,12 +37,13 @@ export async function requireApiActor():
 
   const email = user.primaryEmailAddress?.emailAddress ?? "";
   const canViewOrgContracts = isAdminEmail(email) || isLegalEmail(email);
+  const organizationIds = await getOrganizationIdsForActor(email);
 
   return {
     actor: {
       email,
       name: getUserDisplayName(user),
-      organizationIds: getAllowedOrganizationIds(),
+      organizationIds,
       canViewOrgContracts,
     },
   };

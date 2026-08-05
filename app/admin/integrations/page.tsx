@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { NavIcon } from "@/components/layout/NavIcon";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { requireAdminOrganizationPageContext } from "@/lib/admin-organization-page";
 import { getDirectoryConfig } from "@/lib/directory-sync";
 import { getPoConfig } from "@/lib/po-integration";
-import { requireAdminPageUser } from "@/lib/page-auth";
 
 export default async function AdminIntegrationsPage() {
-  await requireAdminPageUser();
-
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const { organizationId, organizations } =
+    await requireAdminOrganizationPageContext();
   const [poConfig, directoryConfig] = await Promise.all([
     getPoConfig(organizationId),
     getDirectoryConfig(organizationId),
@@ -36,6 +34,8 @@ export default async function AdminIntegrationsPage() {
     <AdminShell
       title="Integrations"
       description="Connect external systems used by your contract workflow."
+      organizations={organizations}
+      activeOrganizationId={organizationId}
     >
       <div className="grid gap-4 md:grid-cols-2">
         {integrations.map((integration) => (

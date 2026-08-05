@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { requireAdminOrganizationActor } from "@/lib/admin-organization-api";
 import {
   deleteContractType,
   updateContractType,
 } from "@/lib/contract-type-store";
-import { requireAdminActor } from "@/lib/directory-route-utils";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -33,8 +32,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
 
-    const organizationId = resolveClauseLibraryOrganizationId();
-    const result = await updateContractType(id, organizationId, {
+    const result = await updateContractType(id, auth.organizationId, {
       label: body.label,
       description: body.description,
       canBeParentAgreement: body.canBeParentAgreement,
@@ -57,8 +55,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: NextRequest, context: RouteContext) {
-  const auth = await requireAdminActor();
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -66,8 +64,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
   try {
     const { id } = await context.params;
-    const organizationId = resolveClauseLibraryOrganizationId();
-    const result = await deleteContractType(id, organizationId);
+    const result = await deleteContractType(id, auth.organizationId);
 
     if (result.error) {
       return NextResponse.json({ error: result.error }, { status: 400 });

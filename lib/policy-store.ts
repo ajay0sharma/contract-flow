@@ -4,24 +4,31 @@ import {
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import type { WorkflowPolicy } from "@/lib/workflow-config-types";
 import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
+import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 
 export { getWorkflowPolicy } from "@/lib/workflow-policy-read";
 
 export async function updateWorkflowPolicy(
   policy: WorkflowPolicy,
+  organizationId = DEFAULT_ORGANIZATION_ID,
 ): Promise<WorkflowPolicy> {
   const nextPolicy = { ...policy };
 
   if (allowMemoryPersistence()) {
     const globalStore = globalThis as typeof globalThis & {
-      __workflowPolicy?: WorkflowPolicy;
+      __workflowPolicyByOrg?: Map<string, WorkflowPolicy>;
     };
-    globalStore.__workflowPolicy = nextPolicy;
-    return getWorkflowPolicy();
+
+    if (!globalStore.__workflowPolicyByOrg) {
+      globalStore.__workflowPolicyByOrg = new Map();
+    }
+
+    globalStore.__workflowPolicyByOrg.set(organizationId, nextPolicy);
+    return getWorkflowPolicy(organizationId);
   }
 
   const { saveWorkflowPolicyToDatabase } = await import("@/lib/platform-data-db");
-  await saveWorkflowPolicyToDatabase(nextPolicy);
-  setCachedWorkflowPolicy(nextPolicy);
-  return getWorkflowPolicy();
+  await saveWorkflowPolicyToDatabase(nextPolicy, organizationId);
+  setCachedWorkflowPolicy(organizationId, nextPolicy);
+  return getWorkflowPolicy(organizationId);
 }

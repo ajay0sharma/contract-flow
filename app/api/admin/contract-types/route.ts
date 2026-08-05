@@ -1,29 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { requireAdminOrganizationActor } from "@/lib/admin-organization-api";
 import {
   createContractType,
   listContractTypes,
 } from "@/lib/contract-type-store";
-import { requireAdminActor } from "@/lib/directory-route-utils";
 import { reportError } from "@/lib/error-reporting";
 
-export async function GET() {
-  const auth = await requireAdminActor();
+export async function GET(request: NextRequest) {
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
   }
 
-  const organizationId = resolveClauseLibraryOrganizationId();
-  const contractTypes = await listContractTypes(organizationId, {
+  const contractTypes = await listContractTypes(auth.organizationId, {
     includeInactive: true,
   });
 
-  return NextResponse.json({ contractTypes, organizationId });
+  return NextResponse.json({
+    contractTypes,
+    organizationId: auth.organizationId,
+  });
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdminActor();
+  const auth = await requireAdminOrganizationActor(request);
 
   if ("response" in auth) {
     return auth.response;
@@ -43,9 +44,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
 
-    const organizationId = resolveClauseLibraryOrganizationId();
     const result = await createContractType({
-      organizationId,
+      organizationId: auth.organizationId,
       label: body.label ?? "",
       description: body.description,
       createdById: auth.actorEmail,

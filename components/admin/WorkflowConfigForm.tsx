@@ -7,9 +7,13 @@ import type { WorkflowConfig } from "@/lib/workflow-config-types";
 
 interface WorkflowConfigFormProps {
   initialConfig: WorkflowConfig;
+  organizationId: string;
 }
 
-export function WorkflowConfigForm({ initialConfig }: WorkflowConfigFormProps) {
+export function WorkflowConfigForm({
+  initialConfig,
+  organizationId,
+}: WorkflowConfigFormProps) {
   const [config, setConfig] = useState(initialConfig);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +84,7 @@ export function WorkflowConfigForm({ initialConfig }: WorkflowConfigFormProps) {
 
     startTransition(async () => {
       try {
-        await saveWorkflowConfigAction(config);
+        await saveWorkflowConfigAction(config, organizationId);
         setMessage("Workflow settings saved.");
       } catch (submitError) {
         setError(

@@ -33,7 +33,7 @@ git push -u origin main
 2. Import the GitHub repository
 3. Framework preset: **Next.js** (auto-detected)
 4. Root directory: `.` (default)
-5. Build command: uses `vercel.json` → `prisma migrate deploy && npm run build`
+5. Build command: uses `vercel.json` → `npm run build:deploy` (`prisma migrate deploy && next build`)
 
 ### 3. Environment variables
 
@@ -64,7 +64,8 @@ In [Clerk Dashboard](https://dashboard.clerk.com) → your app → **Domains**:
 
 ### 5. Supabase
 
-- **Database**: migrations run automatically on each Vercel build via `prisma migrate deploy`
+- **Database**: migrations run automatically on each Vercel build via `npm run build:deploy`
+- **Health check**: `GET /api/health` returns app and database status (public, no auth)
 - **Storage**: after first deploy, ensure buckets exist (one-time):
 
 ```bash
@@ -86,12 +87,26 @@ npx vercel --prod
 
 `vercel.json` schedules directory sync daily at 2:00 UTC (`/api/cron/directory-sync`). Requires `CRON_SECRET` in Vercel env vars.
 
+## CI
+
+GitHub Actions runs on every push to `main` and on pull requests (`.github/workflows/ci.yml`):
+
+- `prisma validate`, `prisma generate`
+- `npm run lint`
+- `npm run build`
+- `npm run test:flows` and `prisma migrate status` when the `DATABASE_URL` repository secret is configured
+
+Add **Settings → Secrets and variables → Actions → `DATABASE_URL`** (Supabase pooler URI) to enable database-backed CI checks.
+
 ## Scripts
 
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Local dev server |
-| `npm run build` | Production build |
+| `npm run build` | Production build (local/CI compile check) |
+| `npm run build:deploy` | Apply migrations, then build (Vercel production) |
+| `npm run ci` | Local CI parity: validate, generate, lint, build |
 | `npm run db:migrate` | Create/apply migrations locally |
-| `npx prisma migrate deploy` | Apply migrations (also runs on Vercel build) |
+| `npm run db:deploy` | Apply pending migrations (`prisma migrate deploy`) |
+| `npm run test:flows` | Integration tests for intake/legal workflow |
 | `npm run storage:ensure-templates-bucket` | Create Supabase storage buckets |

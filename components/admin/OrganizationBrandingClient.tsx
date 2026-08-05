@@ -8,7 +8,13 @@ import type { OrganizationBrandingView } from "@/types/organization-branding";
 const ACCEPTED_LOGO_TYPES =
   "image/png,image/jpeg,image/svg+xml,image/webp,image/gif";
 
-export function OrganizationBrandingClient() {
+interface OrganizationBrandingClientProps {
+  organizationId: string;
+}
+
+export function OrganizationBrandingClient({
+  organizationId,
+}: OrganizationBrandingClientProps) {
   const { refreshBranding } = useBranding();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +34,10 @@ export function OrganizationBrandingClient() {
     setError(null);
 
     try {
-      const response = await fetch("/api/admin/branding", { cache: "no-store" });
+      const response = await fetch(
+        `/api/admin/branding?organizationId=${encodeURIComponent(organizationId)}`,
+        { cache: "no-store" },
+      );
 
       if (!response.ok) {
         throw new Error("Failed to load organization branding.");
@@ -49,7 +58,7 @@ export function OrganizationBrandingClient() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     void loadBranding();
