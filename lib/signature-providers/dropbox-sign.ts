@@ -60,9 +60,7 @@ export async function sendDropboxSignEnvelope(
   context: ProviderContext,
   request: SendSignatureRequest,
 ): Promise<SendSignatureResult> {
-  const primarySigner = request.signers[0];
-
-  if (!primarySigner) {
+  if (request.signers.length === 0) {
     throw new Error("At least one signer is required.");
   }
 
@@ -71,13 +69,13 @@ export async function sendDropboxSignEnvelope(
   form.append("subject", request.subject);
   form.append(
     "signers",
-    JSON.stringify([
-      {
-        email_address: primarySigner.email,
-        name: primarySigner.name,
-        order: 0,
-      },
-    ]),
+    JSON.stringify(
+      request.signers.map((signer, index) => ({
+        email_address: signer.email,
+        name: signer.name,
+        order: index,
+      })),
+    ),
   );
 
   if (request.document.downloadUrl) {
@@ -118,6 +116,9 @@ export async function sendDropboxSignEnvelope(
     externalEnvelopeId:
       payload.signature_request?.signature_request_id ?? null,
     status: "sent",
+    applicationUrl: payload.signature_request?.signature_request_id
+      ? `https://app.hellosign.com/home/manage?guid=${encodeURIComponent(payload.signature_request.signature_request_id)}`
+      : null,
     metadata: payload,
   };
 }

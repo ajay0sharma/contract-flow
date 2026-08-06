@@ -61,6 +61,18 @@ export interface SignatureEnvelopeView {
   lastError: string | null;
   sentByEmail: string | null;
   sentByName: string | null;
+  applicationUrl?: string | null;
+}
+
+export interface InitiateSignatureInput {
+  counterparty: {
+    email: string;
+    name: string;
+  };
+  internalSigner: {
+    email: string;
+    name: string;
+  };
 }
 
 export interface SignatureDocumentPayload {
@@ -83,6 +95,7 @@ export interface SendSignatureRequest {
 export interface SendSignatureResult {
   externalEnvelopeId: string | null;
   status: SignatureEnvelopeStatus;
+  applicationUrl?: string | null;
   metadata?: Record<string, unknown>;
 }
 

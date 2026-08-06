@@ -167,9 +167,7 @@ export function WorkflowTimeline({
 }: WorkflowTimelineProps) {
   const [reassignOpen, setReassignOpen] = useState(false);
   const [signatureLoading, setSignatureLoading] = useState(false);
-  const [signatureSending, setSignatureSending] = useState(false);
   const [signatureError, setSignatureError] = useState<string | null>(null);
-  const [signatureConfigured, setSignatureConfigured] = useState(false);
   const [signatureProviderName, setSignatureProviderName] = useState<string | null>(
     null,
   );
@@ -177,9 +175,10 @@ export function WorkflowTimeline({
     useState<SignatureEnvelopeView | null>(null);
 
   useDeferredEffect(() => {
-    if (contract.stage !== "awaiting_signature") {
+    if (contract.stage !== "awaiting_signature" || !isPrivilegedUser) {
       setSignatureEnvelope(null);
-      setSignatureConfigured(false);
+      setSignatureError(null);
+      setSignatureLoading(false);
       return;
     }
 
@@ -195,13 +194,11 @@ export function WorkflowTimeline({
         }
 
         return (await response.json()) as {
-          configured: boolean;
           displayName: string;
           envelope: SignatureEnvelopeView | null;
         };
       })
       .then((payload) => {
-        setSignatureConfigured(payload.configured);
         setSignatureProviderName(payload.displayName);
         setSignatureEnvelope(payload.envelope);
       })
@@ -213,34 +210,7 @@ export function WorkflowTimeline({
       .finally(() => {
         setSignatureLoading(false);
       });
-  }, [contract.id, contract.stage]);
-
-  async function handleSendForSignature(): Promise<void> {
-    setSignatureSending(true);
-    setSignatureError(null);
-
-    try {
-      const response = await fetch(
-        `/api/contracts/${contract.id}/send-for-signature`,
-        { method: "POST" },
-      );
-      const payload = (await response.json()) as SignatureEnvelopeView & {
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to send for signature.");
-      }
-
-      setSignatureEnvelope(payload);
-    } catch (error) {
-      setSignatureError(
-        error instanceof Error ? error.message : "Failed to send for signature.",
-      );
-    } finally {
-      setSignatureSending(false);
-    }
-  }
+  }, [contract.id, contract.stage, isPrivilegedUser]);
 
   const currentStep = contract.workflowSteps.find(
     (step) => step.status === "current",
@@ -403,16 +373,6 @@ export function WorkflowTimeline({
               ) : null}
               {isPrivilegedUser ? (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {signatureConfigured && !signatureEnvelope ? (
-                    <button
-                      type="button"
-                      disabled={signatureSending}
-                      onClick={() => void handleSendForSignature()}
-                      className="rounded-md bg-teal-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-800 disabled:opacity-60"
-                    >
-                      {signatureSending ? "Sending…" : "Send for signature"}
-                    </button>
-                  ) : null}
                   <ActivateContractButton contractId={contract.id} />
                 </div>
               ) : null}

@@ -93,12 +93,22 @@ export async function sendWebhookBridgeEnvelope(
     envelopeId?: string;
     externalEnvelopeId?: string;
     status?: string;
+    applicationUrl?: string;
+    signingUrl?: string;
+    portalUrl?: string;
+    url?: string;
   };
 
   return {
     externalEnvelopeId:
       payload.envelopeId ?? payload.externalEnvelopeId ?? null,
     status: "sent",
+    applicationUrl:
+      payload.applicationUrl ??
+      payload.signingUrl ??
+      payload.portalUrl ??
+      payload.url ??
+      null,
     metadata: {
       providerResponse: payload,
     },

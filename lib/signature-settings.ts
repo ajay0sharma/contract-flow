@@ -125,3 +125,64 @@ export const DEFAULT_DROPBOX_SIGN_BASE_URL = "https://api.hellosign.com/v3";
 
 export const DEFAULT_ADOBE_SIGN_BASE_URL =
   "https://api.na1.adobesign.com/api/rest/v6";
+
+export function resolveSignatureApplicationUrl(options: {
+  provider: SignatureProvider;
+  externalEnvelopeId: string | null;
+  baseUrl: string | null;
+  metadata?: Record<string, unknown> | null;
+}): string | null {
+  const metadata = options.metadata ?? {};
+  const providerResponse =
+    metadata.providerResponse &&
+    typeof metadata.providerResponse === "object" &&
+    !Array.isArray(metadata.providerResponse)
+      ? (metadata.providerResponse as Record<string, unknown>)
+      : null;
+
+  const directUrl =
+    pickUrl(metadata) ??
+    (providerResponse ? pickUrl(providerResponse) : null);
+
+  if (directUrl) {
+    return directUrl;
+  }
+
+  if (!options.externalEnvelopeId) {
+    return null;
+  }
+
+  switch (options.provider) {
+    case "docusign": {
+      const host =
+        options.baseUrl?.includes("demo.docusign.net") ||
+        options.baseUrl?.includes("account-d")
+          ? "apps-d.docusign.com"
+          : "apps.docusign.com";
+
+      return `https://${host}/send/documents/details/${options.externalEnvelopeId}`;
+    }
+    case "dropbox_sign":
+      return `https://app.hellosign.com/home/manage?guid=${encodeURIComponent(options.externalEnvelopeId)}`;
+    default:
+      return null;
+  }
+}
+
+function pickUrl(record: Record<string, unknown>): string | null {
+  for (const key of [
+    "applicationUrl",
+    "signingUrl",
+    "portalUrl",
+    "url",
+    "launchUrl",
+  ]) {
+    const value = record[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}

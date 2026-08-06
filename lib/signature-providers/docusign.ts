@@ -195,6 +195,19 @@ export async function sendDocuSignEnvelope(
   return {
     externalEnvelopeId: payload.envelopeId,
     status: "sent",
+    applicationUrl: resolveDocuSignApplicationUrl(context.baseUrl, payload.envelopeId),
     metadata: payload,
   };
+}
+
+function resolveDocuSignApplicationUrl(
+  baseUrl: string | null,
+  envelopeId: string,
+): string {
+  const host =
+    baseUrl?.includes("demo.docusign.net") || baseUrl?.includes("account-d")
+      ? "apps-d.docusign.com"
+      : "apps.docusign.com";
+
+  return `https://${host}/send/documents/details/${envelopeId}`;
 }

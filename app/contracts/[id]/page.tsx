@@ -6,6 +6,7 @@ import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { loadContractRelationships } from "@/lib/contract-relationships";
 import { getDirectoryConfig } from "@/lib/directory-sync";
 import { isAdminEmail, isLegalEmail } from "@/lib/legal-access";
+import { getUserDisplayName } from "@/lib/user-display-name";
 
 interface ContractPageProps {
   params: Promise<{ id: string }>;
@@ -26,6 +27,8 @@ export default async function ContractPage({ params }: ContractPageProps) {
 
   const { id } = await params;
   const isPrivilegedUser = isLegalEmail(userEmail) || isAdminEmail(userEmail);
+  const isLegalUser = isLegalEmail(userEmail);
+  const userName = getUserDisplayName(user);
   const organizationId = resolveClauseLibraryOrganizationId();
   const directoryConfig = await getDirectoryConfig(organizationId);
   const directoryEnabled = Boolean(directoryConfig?.isEnabled);
@@ -48,7 +51,9 @@ export default async function ContractPage({ params }: ContractPageProps) {
     <ContractDetailClient
       contractId={id}
       userEmail={userEmail}
+      userName={userName}
       isPrivilegedUser={isPrivilegedUser}
+      isLegalUser={isLegalUser}
       directoryEnabled={directoryEnabled}
       relationshipSection={relationshipSection}
     />

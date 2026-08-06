@@ -14,6 +14,7 @@ import {
   getSignatureIntegrationConfig,
 } from "@/lib/signature-integration";
 import { sendSignatureEnvelopeViaProvider } from "@/lib/signature-providers";
+import { resolveSignatureApplicationUrl } from "@/lib/signature-settings";
 import {
   createTemplateSignedDownloadUrl,
   downloadTemplateDocument,
@@ -21,7 +22,9 @@ import {
 } from "@/lib/supabase-storage";
 import { activateContract } from "@/lib/workflow-engine";
 import type { ContractRecord } from "@/types/contract";
+import { isValidEmail } from "@/lib/person-display";
 import type {
+  InitiateSignatureInput,
   SignatureDocumentPayload,
   SignatureEnvelopeView,
   SignatureSigner,
@@ -76,7 +79,17 @@ function parseSigners(value: unknown): SignatureSigner[] {
   return signers;
 }
 
+function parseMetadata(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
 function mapEnvelopeRow(row: SignatureEnvelope): SignatureEnvelopeView {
+  const metadata = parseMetadata(row.metadata);
+
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -94,6 +107,17 @@ function mapEnvelopeRow(row: SignatureEnvelope): SignatureEnvelopeView {
     lastError: row.lastError,
     sentByEmail: row.sentByEmail,
     sentByName: row.sentByName,
+    applicationUrl:
+      (typeof metadata?.applicationUrl === "string"
+        ? metadata.applicationUrl
+        : null) ??
+      resolveSignatureApplicationUrl({
+        provider: row.provider,
+        externalEnvelopeId: row.externalEnvelopeId,
+        baseUrl:
+          typeof metadata?.baseUrl === "string" ? metadata.baseUrl : null,
+        metadata,
+      }),
   };
 }
 
@@ -143,6 +167,56 @@ function buildSignersFromContract(contract: ContractRecord): SignatureSigner[] {
   return signers;
 }
 
+const ACTIVE_SIGNATURE_STATUSES = new Set<SignatureEnvelopeStatus>([
+  "draft",
+  "sent",
+  "delivered",
+]);
+
+export function buildSignersFromInitiationInput(
+  input: InitiateSignatureInput,
+): SignatureSigner[] {
+  const internalEmail = input.internalSigner.email.trim();
+  const internalName = input.internalSigner.name.trim();
+  const counterpartyEmail = input.counterparty.email.trim();
+  const counterpartyName = input.counterparty.name.trim();
+
+  if (!internalEmail || !internalName) {
+    throw new Error("Internal signer name and email are required.");
+  }
+
+  if (!counterpartyEmail || !counterpartyName) {
+    throw new Error("Counterparty contact name and email are required.");
+  }
+
+  if (!isValidEmail(internalEmail)) {
+    throw new Error("Internal signer email is invalid.");
+  }
+
+  if (!isValidEmail(counterpartyEmail)) {
+    throw new Error("Counterparty contact email is invalid.");
+  }
+
+  if (internalEmail.toLowerCase() === counterpartyEmail.toLowerCase()) {
+    throw new Error("Internal and counterparty signer emails must be different.");
+  }
+
+  return [
+    {
+      email: internalEmail,
+      name: internalName,
+      role: "internal",
+      status: "pending",
+    },
+    {
+      email: counterpartyEmail,
+      name: counterpartyName,
+      role: "counterparty",
+      status: "pending",
+    },
+  ];
+}
+
 async function resolveContractDocument(
   contract: ContractRecord,
 ): Promise<SignatureDocumentPayload> {
@@ -183,7 +257,15 @@ async function resolveContractDocument(
 
 async function persistEnvelope(
   envelope: SignatureEnvelopeView,
+  metadata?: Record<string, unknown> | null,
 ): Promise<SignatureEnvelopeView> {
+  const envelopeMetadata = {
+    ...(metadata ?? {}),
+    ...(envelope.applicationUrl
+      ? { applicationUrl: envelope.applicationUrl }
+      : {}),
+  };
+
   if (allowMemoryPersistence() || !isDatabaseConfigured()) {
     getMemoryEnvelopeStore().set(envelope.id, envelope);
     return envelope;
@@ -209,6 +291,7 @@ async function persistEnvelope(
       lastError: envelope.lastError,
       sentByEmail: envelope.sentByEmail,
       sentByName: envelope.sentByName,
+      metadata: toJsonValue(envelopeMetadata),
     },
     update: {
       externalEnvelopeId: envelope.externalEnvelopeId,
@@ -223,6 +306,7 @@ async function persistEnvelope(
       lastError: envelope.lastError,
       sentByEmail: envelope.sentByEmail,
       sentByName: envelope.sentByName,
+      metadata: toJsonValue(envelopeMetadata),
     },
   });
 
@@ -234,6 +318,7 @@ export async function sendContractForSignature(options: {
   organizationId: string;
   actorEmail: string;
   actorName: string;
+  signers?: SignatureSigner[];
 }): Promise<SignatureEnvelopeView> {
   const config = await getSignatureIntegrationConfig(options.organizationId);
 
@@ -254,7 +339,21 @@ export async function sendContractForSignature(options: {
     throw new Error("Contract is not awaiting signature.");
   }
 
-  const signers = buildSignersFromContract(contract);
+  const existingEnvelope = await getLatestSignatureEnvelopeForContract(
+    options.contractId,
+  );
+
+  if (
+    existingEnvelope &&
+    ACTIVE_SIGNATURE_STATUSES.has(existingEnvelope.status)
+  ) {
+    throw new Error("This contract has already been sent for signature.");
+  }
+
+  const signers =
+    options.signers && options.signers.length > 0
+      ? options.signers
+      : buildSignersFromContract(contract);
 
   if (signers.length === 0) {
     throw new Error("No signer email addresses are available on this contract.");
@@ -283,6 +382,15 @@ export async function sendContractForSignature(options: {
     },
   );
 
+  const applicationUrl =
+    result.applicationUrl ??
+    resolveSignatureApplicationUrl({
+      provider: config.provider,
+      externalEnvelopeId: result.externalEnvelopeId,
+      baseUrl: config.baseUrl,
+      metadata: result.metadata ?? null,
+    });
+
   const envelope: SignatureEnvelopeView = {
     id: randomUUID(),
     organizationId: options.organizationId,
@@ -300,9 +408,13 @@ export async function sendContractForSignature(options: {
     lastError: null,
     sentByEmail: options.actorEmail,
     sentByName: options.actorName,
+    applicationUrl,
   };
 
-  const saved = await persistEnvelope(envelope);
+  const saved = await persistEnvelope(envelope, {
+    ...(result.metadata ?? {}),
+    baseUrl: config.baseUrl,
+  });
 
   await writeAuditLog({
     organizationId: options.organizationId,

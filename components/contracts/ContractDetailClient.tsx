@@ -8,6 +8,7 @@ import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge"
 import { StageBadge } from "@/components/contracts/StageBadge";
 import { UploadContractAttachmentForm } from "@/components/contracts/UploadContractAttachmentForm";
 import { ContractRelatedEmails } from "@/components/contracts/ContractRelatedEmails";
+import { ContractESignatureSection } from "@/components/contracts/ContractESignatureSection";
 import { ContractObligationsCard } from "@/components/contracts/ContractObligationsCard";
 import { WorkflowTimeline } from "@/components/contracts/WorkflowTimeline";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
@@ -34,7 +35,9 @@ import type {
 interface ContractDetailClientProps {
   contractId: string;
   userEmail: string;
+  userName: string;
   isPrivilegedUser: boolean;
+  isLegalUser: boolean;
   directoryEnabled?: boolean;
   relationshipSection?: ReactNode;
 }
@@ -693,7 +696,9 @@ async function fetchContract(contractId: string): Promise<ContractRecord> {
 export function ContractDetailClient({
   contractId,
   userEmail,
+  userName,
   isPrivilegedUser,
+  isLegalUser,
   directoryEnabled = false,
   relationshipSection = null,
 }: ContractDetailClientProps) {
@@ -1768,6 +1773,17 @@ export function ContractDetailClient({
           void loadContract();
         }}
       />
+
+      {isLegalUser && contract ? (
+        <ContractESignatureSection
+          contract={contract}
+          userEmail={userEmail}
+          userName={userName}
+          onEnvelopeSent={() => {
+            void loadContract();
+          }}
+        />
+      ) : null}
 
       {relationshipSection}
 
