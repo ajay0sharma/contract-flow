@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { addContractAttachmentAction } from "@/app/actions/contracts";
 import {
@@ -12,6 +12,8 @@ import {
 
 interface UploadContractAttachmentFormProps {
   contractId: string;
+  onUploaded?: () => void | Promise<void>;
+  variant?: "default" | "detail";
 }
 
 function readFileAsBase64(file: File): Promise<string> {
@@ -40,8 +42,11 @@ function readFileAsBase64(file: File): Promise<string> {
 
 export function UploadContractAttachmentForm({
   contractId,
+  onUploaded,
+  variant = "default",
 }: UploadContractAttachmentFormProps) {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [documentType, setDocumentType] = useState<IntakeDocumentType | "">("");
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,6 +80,10 @@ export function UploadContractAttachmentForm({
         setMessage(`Uploaded ${file.name}.`);
         setDocumentType("");
         setFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        await onUploaded?.();
         router.refresh();
       } catch (uploadError) {
         setError(
@@ -86,25 +95,56 @@ export function UploadContractAttachmentForm({
     });
   }
 
+  const isDetail = variant === "detail";
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-5 rounded-md border border-border bg-surface-muted p-4"
+      className={
+        isDetail
+          ? "rounded-lg border border-blue-200 bg-blue-50 px-4 py-4"
+          : "mt-5 rounded-md border border-border bg-surface-muted p-4"
+      }
     >
-      <h3 className="text-sm font-medium text-foreground">Upload document</h3>
-      <p className="mt-1 text-xs text-text-muted">
-        Support, legal, and admin users can add agreements or supporting
-        documents to this record.
+      <h3
+        className={
+          isDetail
+            ? "text-sm font-medium text-blue-950"
+            : "text-sm font-medium text-foreground"
+        }
+      >
+        Upload document
+      </h3>
+      <p
+        className={
+          isDetail ? "mt-1 text-xs text-blue-900" : "mt-1 text-xs text-text-muted"
+        }
+      >
+        {isDetail
+          ? "Add agreements or supporting documents while editing this record."
+          : "Support, legal, and admin users can add agreements or supporting documents to this record."}
       </p>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <label className="block text-sm">
-          <span className="font-medium text-foreground">Document type</span>
+          <span
+            className={
+              isDetail
+                ? "font-medium text-blue-950"
+                : "font-medium text-foreground"
+            }
+          >
+            Document type
+          </span>
           <select
             value={documentType}
             onChange={(event) =>
               setDocumentType(event.target.value as IntakeDocumentType | "")
             }
-            className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            className={
+              isDetail
+                ? "mt-1 w-full rounded-md border border-blue-200 bg-white px-3 py-2 text-sm text-gray-900"
+                : "mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
+            }
           >
             <option value="">Select document type</option>
             {INTAKE_DOCUMENT_TYPES.map((type) => (
@@ -115,12 +155,25 @@ export function UploadContractAttachmentForm({
           </select>
         </label>
         <label className="block text-sm">
-          <span className="font-medium text-foreground">File</span>
+          <span
+            className={
+              isDetail
+                ? "font-medium text-blue-950"
+                : "font-medium text-foreground"
+            }
+          >
+            File
+          </span>
           <input
+            ref={fileInputRef}
             type="file"
             accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp,.txt,.csv"
             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            className="mt-1 block w-full text-sm text-text-secondary file:mr-4 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-border"
+            className={
+              isDetail
+                ? "mt-1 block w-full text-sm text-blue-950 file:mr-4 file:rounded-md file:border-0 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-blue-950 hover:file:bg-blue-100"
+                : "mt-1 block w-full text-sm text-text-secondary file:mr-4 file:rounded-md file:border-0 file:bg-surface file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-border"
+            }
           />
         </label>
       </div>
@@ -129,7 +182,11 @@ export function UploadContractAttachmentForm({
       <button
         type="submit"
         disabled={isPending}
-        className="mt-4 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+        className={
+          isDetail
+            ? "mt-4 rounded-md bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800 disabled:opacity-60"
+            : "mt-4 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+        }
       >
         {isPending ? "Uploading..." : "Upload document"}
       </button>

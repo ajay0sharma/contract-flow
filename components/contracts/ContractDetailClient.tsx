@@ -738,6 +738,21 @@ export function ContractDetailClient({
     }
   }, [contractId]);
 
+  const refreshContract = useCallback(async () => {
+    try {
+      const record = await fetchContract(contractId);
+      setContract(record);
+    } catch (loadError) {
+      setToast({
+        type: "error",
+        message:
+          loadError instanceof Error
+            ? loadError.message
+            : "Failed to refresh attachments.",
+      });
+    }
+  }, [contractId]);
+
   useDeferredEffect(() => {
     void loadContract();
   }, [loadContract]);
@@ -1014,6 +1029,8 @@ export function ContractDetailClient({
   const activeContract = displayContract ?? contract;
   const displayCurrency = readCurrency(activeContract);
   const showFinancialSection = showFinancialCard || isEditing;
+  const showAttachmentUpload =
+    (isEditing && isPrivilegedUser) || isSupportEmail(userEmail);
 
   const leftColumn = (
     <div className="flex min-w-0 flex-1 flex-col gap-5">
@@ -1734,10 +1751,6 @@ export function ContractDetailClient({
               </dl>
             </div>
           ) : null}
-
-          <div className="mt-4 border-t border-gray-100 pt-4">
-            <UploadContractAttachmentForm contractId={contract.id} />
-          </div>
         </section>
       ) : null}
 
@@ -1745,15 +1758,36 @@ export function ContractDetailClient({
         <ContractObligationsCard contractId={contract.id} />
       ) : null}
 
-      <section className={CARD_CLASS}>
+      <section className={editCardClass(isEditing, CARD_CLASS)}>
         <h2 className={CARD_HEADER_CLASS}>Attachments</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          {isEditing && isPrivilegedUser
+            ? "Upload supporting documents while you edit this record."
+            : isSupportEmail(userEmail)
+              ? "Upload agreements or supporting documents to this record."
+              : "Documents uploaded to this contract record."}
+        </p>
+
+        {showAttachmentUpload ? (
+          <div className="mt-4">
+            <UploadContractAttachmentForm
+              contractId={contract.id}
+              variant={isEditing && isPrivilegedUser ? "detail" : "default"}
+              onUploaded={() => {
+                void refreshContract();
+              }}
+            />
+          </div>
+        ) : null}
 
         {contract.attachments.length === 0 ? (
-          <p className="text-sm text-gray-500">
+          showAttachmentUpload ? null : (
+          <p className="mt-4 text-sm text-gray-500">
             No attachments uploaded yet.
           </p>
+          )
         ) : (
-          <div className="space-y-4">
+          <div className="mt-4 space-y-4">
             {contract.attachments.map((attachment) => (
               <AttachmentRow key={attachment.id} attachment={attachment} />
             ))}
