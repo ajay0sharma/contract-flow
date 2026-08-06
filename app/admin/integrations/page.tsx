@@ -5,14 +5,17 @@ import { requireAdminOrganizationPageContext } from "@/lib/admin-organization-pa
 import { getDirectoryConfig } from "@/lib/directory-sync";
 import { getOrganizationEmailConfig } from "@/lib/organization-email-config";
 import { getPoConfig } from "@/lib/po-integration";
+import { getSignatureIntegrationConfig } from "@/lib/signature-integration";
 
 export default async function AdminIntegrationsPage() {
   const { organizationId, organizations } =
     await requireAdminOrganizationPageContext();
-  const [poConfig, directoryConfig, emailConfig] = await Promise.all([
+  const [poConfig, directoryConfig, emailConfig, signatureConfig] =
+    await Promise.all([
     getPoConfig(organizationId),
     getDirectoryConfig(organizationId),
     getOrganizationEmailConfig(organizationId),
+    getSignatureIntegrationConfig(organizationId),
   ]);
 
   const emailConfigured =
@@ -34,6 +37,13 @@ export default async function AdminIntegrationsPage() {
       href: "/admin/directory",
       icon: "users-group" as const,
       connected: Boolean(directoryConfig?.isEnabled),
+    },
+    {
+      title: "E-signature integration",
+      description: "Send approved contracts for client e-signature",
+      href: "/admin/signature",
+      icon: "shield-lock" as const,
+      connected: Boolean(signatureConfig.isEnabled),
     },
     {
       title: "Purchase order integration",

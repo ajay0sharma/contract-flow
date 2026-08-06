@@ -119,6 +119,24 @@ enum DirectoryProvider {
   manual
 }
 
+enum SignatureProvider {
+  docusign
+  dropbox_sign
+  adobe_sign
+  webhook_bridge
+  manual
+}
+
+enum SignatureEnvelopeStatus {
+  draft
+  sent
+  delivered
+  completed
+  declined
+  voided
+  failed
+}
+
 enum SyncStatus {
   never_synced
   syncing
@@ -191,6 +209,7 @@ model Contract {
   obligationRecords           Obligation[]
   riskFactors                 RiskFactor[]
   clauseUsages                ClauseUsage[]
+  signatureEnvelopes          SignatureEnvelope[]
   createdAt                   DateTime             @default(now())
   updatedAt                   DateTime             @updatedAt
 
@@ -499,6 +518,57 @@ model OrganizationEmailConfig {
   lastSyncError          String?   @db.Text
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
+}
+
+model SignatureIntegrationConfig {
+  id                     String            @id @default(cuid())
+  organizationId         String            @unique
+  provider               SignatureProvider
+  isEnabled              Boolean           @default(false)
+  displayName            String
+  accountId              String?
+  baseUrl                String?
+  encryptedCredentials   String?           @db.Text
+  encryptedWebhookSecret String?           @db.Text
+  autoActivateOnComplete Boolean           @default(true)
+  reminderDays           Int               @default(3)
+  settings               Json?
+  lastTestAt             DateTime?
+  lastTestStatus         String?
+  lastTestError          String?           @db.Text
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+
+  @@index([organizationId])
+}
+
+model SignatureEnvelope {
+  id                 String                  @id @default(cuid())
+  organizationId     String
+  contractId         String
+  contract           Contract                @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  provider           SignatureProvider
+  externalEnvelopeId String?
+  status             SignatureEnvelopeStatus @default(draft)
+  subject            String?
+  signers            Json                    @default("[]")
+  documentName       String?
+  sentAt             DateTime?
+  completedAt        DateTime?
+  declinedAt         DateTime?
+  voidedAt           DateTime?
+  lastError          String?                 @db.Text
+  sentByEmail        String?
+  sentByName         String?
+  metadata           Json?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@index([organizationId])
+  @@index([contractId])
+  @@index([externalEnvelopeId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model IntakeFormDefinition {

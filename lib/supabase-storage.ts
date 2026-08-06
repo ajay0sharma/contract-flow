@@ -281,6 +281,24 @@ export async function downloadExecutedDocument(storagePath: string): Promise<Buf
   return Buffer.from(arrayBuffer);
 }
 
+export async function downloadTemplateDocument(
+  storagePath: string,
+): Promise<Buffer> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.storage
+    .from(CONTRACT_TEMPLATES_BUCKET)
+    .download(storagePath);
+
+  if (error || !data) {
+    throw new Error(
+      error?.message ?? "Unable to download the template document from storage.",
+    );
+  }
+
+  const arrayBuffer = await data.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
 export async function createExecutedDocumentSignedUrl(
   storagePath: string,
   expiresInSeconds = 1800,

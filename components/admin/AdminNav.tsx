@@ -13,6 +13,7 @@ const integrationLinks = [
   { href: "/admin/integrations", label: "Integrations" },
   { href: "/admin/email", label: "Email integration" },
   { href: "/admin/directory", label: "User directory" },
+  { href: "/admin/signature", label: "E-signature" },
   { href: "/settings/po-integration", label: "PO integration" },
 ];
 
