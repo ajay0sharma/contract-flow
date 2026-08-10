@@ -1,23 +1,44 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { saveWorkflowConfigAction } from "@/app/actions/admin";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
-import type { WorkflowConfig } from "@/lib/workflow-config-types";
+import type {
+  ContractTypeWorkflowRule,
+  WorkflowConfig,
+} from "@/lib/workflow-config-types";
+import type { ContractTypeRecord } from "@/types/contract-template";
 
 interface WorkflowConfigFormProps {
   initialConfig: WorkflowConfig;
   organizationId: string;
+  contractTypes: ContractTypeRecord[];
+}
+
+function findTypeRule(
+  rules: ContractTypeWorkflowRule[],
+  slug: string,
+): ContractTypeWorkflowRule | undefined {
+  return rules.find((rule) => rule.contractTypeSlug === slug);
 }
 
 export function WorkflowConfigForm({
   initialConfig,
   organizationId,
+  contractTypes,
 }: WorkflowConfigFormProps) {
   const [config, setConfig] = useState(initialConfig);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const activeContractTypes = useMemo(
+    () =>
+      [...contractTypes]
+        .filter((type) => type.isActive)
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [contractTypes],
+  );
 
   function updateRuleThreshold(ruleId: string, threshold: number) {
     setConfig((current) => ({
@@ -77,6 +98,104 @@ export function WorkflowConfigForm({
     }));
   }
 
+  function upsertTypeRule(
+    type: ContractTypeRecord,
+    updater: (rule: ContractTypeWorkflowRule) => ContractTypeWorkflowRule,
+  ) {
+    setConfig((current) => {
+      const existing = findTypeRule(
+        current.contractTypeWorkflowRules,
+        type.slug,
+      );
+
+      if (existing) {
+        return {
+          ...current,
+          contractTypeWorkflowRules: current.contractTypeWorkflowRules.map(
+            (rule) =>
+              rule.contractTypeSlug === type.slug ? updater(rule) : rule,
+          ),
+        };
+      }
+
+      return {
+        ...current,
+        contractTypeWorkflowRules: [
+          ...current.contractTypeWorkflowRules,
+          updater({
+            contractTypeSlug: type.slug,
+            contractTypeLabel: type.label,
+            disabledStepIds: [],
+            routingRuleOverrides: {},
+          }),
+        ],
+      };
+    });
+  }
+
+  function isStepEnabledForType(typeSlug: string, stepId: string): boolean {
+    const rule = findTypeRule(config.contractTypeWorkflowRules, typeSlug);
+    return !rule?.disabledStepIds.includes(stepId);
+  }
+
+  function toggleStepForType(
+    type: ContractTypeRecord,
+    stepId: string,
+    enabled: boolean,
+  ) {
+    upsertTypeRule(type, (rule) => {
+      const disabled = new Set(rule.disabledStepIds);
+
+      if (enabled) {
+        disabled.delete(stepId);
+      } else {
+        disabled.add(stepId);
+      }
+
+      return {
+        ...rule,
+        contractTypeLabel: type.label,
+        disabledStepIds: [...disabled],
+      };
+    });
+  }
+
+  function updateTypeThresholdOverride(
+    type: ContractTypeRecord,
+    ruleId: string,
+    value: string,
+  ) {
+    upsertTypeRule(type, (rule) => {
+      const nextOverrides = { ...rule.routingRuleOverrides };
+      const trimmed = value.trim();
+
+      if (!trimmed) {
+        delete nextOverrides[ruleId];
+      } else {
+        nextOverrides[ruleId] = Number(trimmed);
+      }
+
+      return {
+        ...rule,
+        contractTypeLabel: type.label,
+        routingRuleOverrides: nextOverrides,
+      };
+    });
+  }
+
+  function resetTypeRule(typeSlug: string) {
+    setConfig((current) => ({
+      ...current,
+      contractTypeWorkflowRules: current.contractTypeWorkflowRules.filter(
+        (rule) => rule.contractTypeSlug !== typeSlug,
+      ),
+    }));
+  }
+
+  function hasCustomTypeRule(typeSlug: string): boolean {
+    return Boolean(findTypeRule(config.contractTypeWorkflowRules, typeSlug));
+  }
+
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setMessage(null);
@@ -132,8 +251,9 @@ export function WorkflowConfigForm({
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-stone-900">Routing rules</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Amount thresholds that add department VP, finance, and executive
-          approval steps.
+          Default amount thresholds that add department VP, finance, and
+          executive approval steps. Contract-type overrides can change these
+          below.
         </p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {config.routingRules.map((rule) => (
@@ -159,6 +279,128 @@ export function WorkflowConfigForm({
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-stone-900">
+          Contract type workflow rules
+        </h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Adjust the approval chain and amount thresholds for specific contract
+          types. Contracts without a custom rule use the default workflow
+          above.
+        </p>
+
+        {activeContractTypes.length === 0 ? (
+          <p className="mt-4 rounded-md border border-dashed border-stone-300 px-4 py-4 text-sm text-stone-600">
+            Add contract types in the{" "}
+            <a
+              href="/admin/dashboard?section=contract-types"
+              className="font-medium text-stone-900 underline"
+            >
+              Contract types
+            </a>{" "}
+            section before configuring type-specific workflow rules.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {activeContractTypes.map((type) => {
+              const typeRule = findTypeRule(
+                config.contractTypeWorkflowRules,
+                type.slug,
+              );
+
+              return (
+                <div
+                  key={type.slug}
+                  className="rounded-md border border-stone-200 px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-stone-900">{type.label}</p>
+                      {type.description ? (
+                        <p className="mt-1 text-sm text-stone-600">
+                          {type.description}
+                        </p>
+                      ) : null}
+                    </div>
+                    {hasCustomTypeRule(type.slug) ? (
+                      <button
+                        type="button"
+                        onClick={() => resetTypeRule(type.slug)}
+                        className="rounded-md border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                      >
+                        Reset to default
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-stone-700">
+                      Approval steps
+                    </p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      {config.steps.map((step) => (
+                        <label
+                          key={`${type.slug}-${step.id}`}
+                          className="flex items-center gap-2 rounded-md border border-stone-200 px-3 py-2 text-sm text-stone-800"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isStepEnabledForType(type.slug, step.id)}
+                            onChange={(event) =>
+                              toggleStepForType(
+                                type,
+                                step.id,
+                                event.target.checked,
+                              )
+                            }
+                          />
+                          <span>{step.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-sm font-medium text-stone-700">
+                      Threshold overrides (optional)
+                    </p>
+                    <div className="mt-2 grid gap-3 md:grid-cols-2">
+                      {config.routingRules.map((rule) => (
+                        <label
+                          key={`${type.slug}-${rule.id}`}
+                          className="block text-sm"
+                        >
+                          <span className="font-medium text-stone-700">
+                            {rule.label}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1000}
+                            placeholder={`Default ${rule.threshold?.toLocaleString() ?? "0"}`}
+                            value={
+                              typeRule?.routingRuleOverrides[rule.id] ?? ""
+                            }
+                            onChange={(event) =>
+                              updateTypeThresholdOverride(
+                                type,
+                                rule.id,
+                                event.target.value,
+                              )
+                            }
+                            className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-stone-900"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
@@ -226,7 +468,7 @@ export function WorkflowConfigForm({
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-stone-900">Approval chain</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Sequential steps executed after contract intake.
+          Default sequential steps executed after contract intake.
         </p>
         <ol className="mt-4 space-y-4">
           {config.steps.map((step, index) => (

@@ -183,6 +183,8 @@ function buildSeedContract(
   const workflowSteps = resolveWorkflowSteps(
     partial.amountNumeric,
     partial.department,
+    partial.contractType,
+    partial.companyProfileId,
   ).map(
     (step, index) => ({
       ...step,

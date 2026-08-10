@@ -249,13 +249,15 @@ export default async function AdminDashboardPage() {
             Workflow settings
           </h2>
           <p className="mt-1 text-sm text-stone-600">
-            Create or modify the approval chain, reviewer assignees, and routing
-            thresholds from the admin dashboard.
+            Create or modify the default approval chain, reviewer assignees,
+            routing thresholds, and contract-type-specific workflow overrides
+            from the admin dashboard.
           </p>
         </div>
         <WorkflowConfigForm
           initialConfig={workflow}
           organizationId={organizationId}
+          contractTypes={contractTypes}
         />
       </section>
 

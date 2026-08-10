@@ -1,7 +1,9 @@
 import { isPopulated, safeTrim } from "@/lib/string-utils";
 import { getIntakeDocumentTypeLabel } from "@/lib/intake-documents";
 import { getWorkflowConfig } from "@/lib/workflow-config-read";
+import { resolveWorkflowConfigForContractType } from "@/lib/workflow-config-resolve";
 import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
+import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 import type {
   AuditEvent,
   ContractIntakeInput,
@@ -18,8 +20,14 @@ export function parseContractAmount(value: string | undefined | null): number {
 export function resolveWorkflowSteps(
   amount: number,
   department?: string,
+  contractType?: string,
+  organizationId = DEFAULT_ORGANIZATION_ID,
 ): WorkflowStep[] {
-  const workflowConfig = getWorkflowConfig();
+  const baseConfig = getWorkflowConfig(organizationId);
+  const workflowConfig = resolveWorkflowConfigForContractType(
+    baseConfig,
+    contractType,
+  );
   const departmentVpApprover = workflowConfig.vpDepartmentApprovers.find(
     (approver) => approver.department === department,
   );
@@ -120,7 +128,12 @@ export function createContractFromIntake(
 ): ContractRecord {
   const contractAmount = safeTrim(input.contractAmount);
   const amountNumeric = parseContractAmount(contractAmount);
-  const workflowSteps = resolveWorkflowSteps(amountNumeric, input.department);
+  const workflowSteps = resolveWorkflowSteps(
+    amountNumeric,
+    input.department,
+    input.contractType,
+    input.companyProfileId,
+  );
   const timestamp = nowIsoTimestamp();
   const attachments = (input.attachments ?? []).map((attachment, index) => ({
     id: `att-${Date.now()}-${index}`,

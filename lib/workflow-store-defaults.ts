@@ -112,6 +112,7 @@ const defaultWorkflowConfig: WorkflowConfig = {
   ],
   vpDepartmentApprovers: buildDefaultVpApprovers(),
   agreementTypeRules: defaultAgreementTypeRules,
+  contractTypeWorkflowRules: [],
 };
 
 export function normalizeWorkflowConfig(config: WorkflowConfig): void {
@@ -154,6 +155,19 @@ export function normalizeWorkflowConfig(config: WorkflowConfig): void {
       ]),
     ).sort((a, b) => a.localeCompare(b)),
   };
+
+  config.contractTypeWorkflowRules = (config.contractTypeWorkflowRules ?? []).map(
+    (rule) => ({
+      contractTypeSlug: rule.contractTypeSlug?.trim() ?? "",
+      contractTypeLabel: rule.contractTypeLabel?.trim() ?? "",
+      disabledStepIds: Array.from(new Set(rule.disabledStepIds ?? [])),
+      routingRuleOverrides: Object.fromEntries(
+        Object.entries(rule.routingRuleOverrides ?? {}).filter(
+          ([, value]) => typeof value === "number" && Number.isFinite(value),
+        ),
+      ),
+    }),
+  );
 }
 
 export function syncStepThresholds(config: WorkflowConfig): void {

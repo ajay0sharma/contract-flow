@@ -26,6 +26,13 @@ export interface WorkflowRoutingRule {
   threshold?: number;
 }
 
+export interface ContractTypeWorkflowRule {
+  contractTypeSlug: string;
+  contractTypeLabel: string;
+  disabledStepIds: string[];
+  routingRuleOverrides: Record<string, number>;
+}
+
 export interface WorkflowConfig {
   name: string;
   description: string;
@@ -33,6 +40,7 @@ export interface WorkflowConfig {
   routingRules: WorkflowRoutingRule[];
   vpDepartmentApprovers: WorkflowDepartmentApprover[];
   agreementTypeRules: AgreementTypeRules;
+  contractTypeWorkflowRules: ContractTypeWorkflowRule[];
 }
 
 export interface WorkflowPolicy {
