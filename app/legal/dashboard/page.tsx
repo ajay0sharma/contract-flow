@@ -24,13 +24,16 @@ export default async function LegalDashboardPage({
   const explicitView =
     params.view === "all" ||
     params.view === "pending" ||
-    params.view === "intake";
-  const initialTab: "pending" | "all" | "intake" =
+    params.view === "intake" ||
+    params.view === "signature";
+  const initialTab: "pending" | "all" | "intake" | "signature" =
     params.view === "all"
       ? "all"
       : params.view === "intake"
         ? "intake"
-        : "pending";
+        : params.view === "signature"
+          ? "signature"
+          : "pending";
   const displayName = getUserDisplayName(user);
 
   return (

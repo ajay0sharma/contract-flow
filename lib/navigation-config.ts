@@ -27,7 +27,8 @@ export type NavIconName =
   | "mail"
   | "shield-lock"
   | "users-group"
-  | "search";
+  | "search"
+  | "file-certificate";
 
 export interface NavLinkItem {
   href: string;
@@ -79,6 +80,11 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
           href: "/legal/dashboard?view=pending",
           label: "Pending review",
           icon: "clock",
+        },
+        {
+          href: "/legal/dashboard?view=signature",
+          label: "Pending signature",
+          icon: "file-certificate",
         },
         { href: "/calendar", label: "Calendar", icon: "calendar" },
         { href: "/search", label: "Search", icon: "search" },

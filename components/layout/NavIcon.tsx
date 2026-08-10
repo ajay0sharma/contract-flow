@@ -1,7 +1,7 @@
 import type { NavIconName } from "@/lib/navigation-config";
 
 interface NavIconProps {
-  name: NavIconName | "bell" | "chevron-down" | "file-certificate" | "x";
+  name: NavIconName | "bell" | "chevron-down" | "x";
   className?: string;
 }
 
@@ -173,6 +173,15 @@ export function NavIcon({ name, className = "h-[18px] w-[18px]" }: NavIconProps)
           <path d="m21 21-4.3-4.3" />
         </svg>
       );
+    case "file-certificate":
+      return (
+        <svg {...props}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path d="M14 2v6h6" />
+          <circle cx="12" cy="15" r="3" />
+          <path d="M12 12v1" />
+        </svg>
+      );
     case "bell":
       return (
         <svg {...props}>
@@ -184,15 +193,6 @@ export function NavIcon({ name, className = "h-[18px] w-[18px]" }: NavIconProps)
       return (
         <svg {...props}>
           <path d="m6 9 6 6 6-6" />
-        </svg>
-      );
-    case "file-certificate":
-      return (
-        <svg {...props}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <path d="M14 2v6h6" />
-          <circle cx="12" cy="15" r="3" />
-          <path d="M12 12v1" />
         </svg>
       );
     case "x":

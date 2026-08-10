@@ -21,7 +21,7 @@ interface LegalDashboardClientProps {
   explicitView?: boolean;
 }
 
-type DashboardTab = "pending" | "all" | "intake";
+type DashboardTab = "pending" | "all" | "intake" | "signature";
 
 type ApprovalAction = "approve" | "reject";
 
@@ -43,6 +43,8 @@ interface LegalContractsCounts {
   rejected: number;
   total: number;
   overdue: number;
+  pendingReview?: number;
+  awaitingSignature?: number;
 }
 
 interface LegalContractsPagination {
@@ -119,6 +121,13 @@ function sortPendingQueue(contracts: ContractRecord[]): ContractRecord[] {
   );
 }
 
+function sortSignatureQueue(contracts: ContractRecord[]): ContractRecord[] {
+  return [...contracts].sort(
+    (a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
 function resolveContractStatus(
   contract: ContractRecord,
 ): ContractLifecycleStatus {
@@ -156,8 +165,8 @@ function DatabaseIcon({ className }: { className?: string }) {
 
 function MetricsSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-      {Array.from({ length: 5 }).map((_, index) => (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+      {Array.from({ length: 7 }).map((_, index) => (
         <div
           key={index}
           className="animate-pulse rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm"
@@ -186,7 +195,7 @@ function TableSkeleton() {
 }
 
 function buildLegalContractsUrl(
-  view: "all" | "pending",
+  view: "all" | "pending" | "signature",
   options?: {
     contractStatus?: string;
     contractType?: string;
@@ -277,6 +286,9 @@ export function LegalDashboardClient({
   const [pendingContracts, setPendingContracts] = useState<ContractRecord[]>(
     [],
   );
+  const [signatureContracts, setSignatureContracts] = useState<ContractRecord[]>(
+    [],
+  );
   const [databaseContracts, setDatabaseContracts] = useState<ContractRecord[]>(
     [],
   );
@@ -288,6 +300,7 @@ export function LegalDashboardClient({
   const [contractTypeOptions, setContractTypeOptions] = useState<string[]>([]);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [loadingPending, setLoadingPending] = useState(true);
+  const [loadingSignature, setLoadingSignature] = useState(true);
   const [loadingDatabase, setLoadingDatabase] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionPendingId, setActionPendingId] = useState<string | null>(null);
@@ -314,7 +327,9 @@ export function LegalDashboardClient({
         ? "all"
         : initialTab === "intake"
           ? "intake"
-          : "pending";
+          : initialTab === "signature"
+            ? "signature"
+            : "pending";
     router.replace(`/legal/dashboard?view=${defaultView}`, { scroll: false });
   }, [explicitView, initialTab, router]);
 
@@ -325,9 +340,16 @@ export function LegalDashboardClient({
         ? "/legal/dashboard?view=all"
         : tab === "intake"
           ? "/legal/dashboard?view=intake"
-          : "/legal/dashboard?view=pending";
+          : tab === "signature"
+            ? "/legal/dashboard?view=signature"
+            : "/legal/dashboard?view=pending";
     router.replace(nextUrl, { scroll: false });
   }
+
+  const pendingSignature = useMemo(
+    () => sortSignatureQueue(signatureContracts),
+    [signatureContracts],
+  );
 
   const pendingReview = useMemo(
     () => sortPendingQueue(pendingContracts),
@@ -344,7 +366,9 @@ export function LegalDashboardClient({
       if (
         !explicitView &&
         data.counts.total > 0 &&
-        data.counts.draft + data.counts.pending === 0
+        (data.counts.pendingReview ??
+          data.counts.draft + data.counts.pending) === 0 &&
+        (data.counts.awaitingSignature ?? 0) === 0
       ) {
         setActiveTab("all");
         router.replace("/legal/dashboard?view=all", { scroll: false });
@@ -382,6 +406,31 @@ export function LegalDashboardClient({
       );
     } finally {
       setLoadingPending(false);
+    }
+  }, []);
+
+  const loadSignature = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      setLoadingSignature(true);
+    }
+
+    try {
+      const data = await fetchLegalContracts(
+        buildLegalContractsUrl("signature", {
+          pageSize: 100,
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+        }),
+      );
+      setSignatureContracts(dedupeContractRecordsById(data.contracts));
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load pending signature queue",
+      );
+    } finally {
+      setLoadingSignature(false);
     }
   }, []);
 
@@ -435,16 +484,18 @@ export function LegalDashboardClient({
       await Promise.all([
         loadMetrics(),
         loadPending(false),
+        loadSignature(false),
         loadDatabase(filters, false),
       ]);
     },
-    [loadDatabase, loadMetrics, loadPending],
+    [loadDatabase, loadMetrics, loadPending, loadSignature],
   );
 
   useDeferredEffect(() => {
     void loadMetrics();
     void loadPending(true);
-  }, [loadMetrics, loadPending]);
+    void loadSignature(true);
+  }, [loadMetrics, loadPending, loadSignature]);
 
   useDeferredEffect(() => {
     if (activeTab !== "all") {
@@ -458,6 +509,7 @@ export function LegalDashboardClient({
     const intervalId = window.setInterval(() => {
       void loadMetrics();
       void loadPending(false);
+      void loadSignature(false);
 
       if (activeTab === "all") {
         void loadDatabase(databaseFilters, false);
@@ -467,7 +519,7 @@ export function LegalDashboardClient({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeTab, databaseFilters, loadDatabase, loadMetrics, loadPending]);
+  }, [activeTab, databaseFilters, loadDatabase, loadMetrics, loadPending, loadSignature]);
 
   function openReassignModal(contract: ContractRecord): void {
     setReassignModal({ contract });
@@ -594,7 +646,17 @@ export function LegalDashboardClient({
   }
 
   const pendingReviewCount =
-    counts == null ? 0 : counts.draft + counts.pending;
+    counts?.pendingReview ??
+    (counts == null
+      ? 0
+      : Math.max(
+          0,
+          counts.draft +
+            counts.pending -
+            (counts.awaitingSignature ?? 0),
+        ));
+
+  const awaitingSignatureCount = counts?.awaitingSignature ?? 0;
 
   return (
     <div className="w-full min-w-0">
@@ -612,7 +674,7 @@ export function LegalDashboardClient({
         {loadingMetrics ? (
           <MetricsSkeleton />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
             <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-4 shadow-sm">
               <p className="text-sm font-medium text-indigo-900">Total contracts</p>
               <p className="mt-1 text-2xl font-semibold text-indigo-950">
@@ -625,6 +687,14 @@ export function LegalDashboardClient({
               </p>
               <p className="mt-1 text-2xl font-semibold text-amber-950">
                 {pendingReviewCount}
+              </p>
+            </div>
+            <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-4 shadow-sm">
+              <p className="text-sm font-medium text-teal-900">
+                Pending signature
+              </p>
+              <p className="mt-1 text-2xl font-semibold text-teal-950">
+                {awaitingSignatureCount}
               </p>
             </div>
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-4 shadow-sm">
@@ -673,6 +743,22 @@ export function LegalDashboardClient({
             }`}
           >
             Pending review
+          </button>
+          <button
+            type="button"
+            onClick={() => switchTab("signature")}
+            className={`px-5 py-3 text-sm transition-colors ${
+              activeTab === "signature"
+                ? "border-b-2 border-[#3558A0] font-medium text-[#3558A0]"
+                : "border-b-2 border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Pending signature
+            {awaitingSignatureCount > 0 ? (
+              <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800">
+                {awaitingSignatureCount}
+              </span>
+            ) : null}
           </button>
           <button
             type="button"
@@ -870,7 +956,124 @@ export function LegalDashboardClient({
             </ul>
           )}
         </section>
-      ) : (
+      ) : null}
+
+      {activeTab === "signature" ? (
+        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-900">
+              Pending signature queue
+            </h2>
+            <p className="text-sm text-slate-600">
+              Contracts that completed all required approvals and are ready for
+              e-signature. Open a record in edit mode to create and send the
+              signature envelope.
+            </p>
+          </div>
+
+          {loadingSignature ? (
+            <TableSkeleton />
+          ) : pendingSignature.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+              No contracts are currently awaiting signature.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {pendingSignature.map((contract) => {
+                const daysInStage = businessDaysSince(contract.updatedAt);
+
+                return (
+                  <li
+                    key={contract.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/contracts/${contract.id}?edit=1#e-signature`}
+                            className="font-medium text-indigo-700 hover:underline"
+                          >
+                            {contract.recordNumber}
+                          </Link>
+                          <StageBadge stage={contract.stage} />
+                          <span className="text-xs font-medium text-slate-500">
+                            {daysInStage} day{daysInStage === 1 ? "" : "s"} awaiting signature
+                          </span>
+                        </div>
+
+                        <p className="mt-2 line-clamp-2 text-sm font-medium text-slate-900">
+                          {contract.title}
+                        </p>
+
+                        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Approved
+                            </dt>
+                            <dd className="mt-0.5 text-slate-700">
+                              {contract.updatedAt.slice(0, 10)}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Requester
+                            </dt>
+                            <dd className="mt-0.5 truncate text-slate-700">
+                              {contract.requesterName}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Type
+                            </dt>
+                            <dd className="mt-0.5 truncate text-slate-700">
+                              {contract.contractType}
+                            </dd>
+                          </div>
+                          <div className="min-w-0">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Counterparty
+                            </dt>
+                            <dd className="mt-0.5 truncate text-slate-700">
+                              {contract.companyName || "—"}
+                            </dd>
+                          </div>
+                          <div className="min-w-0 sm:col-span-2">
+                            <dt className="font-medium uppercase tracking-wide text-slate-500">
+                              Contact
+                            </dt>
+                            <dd className="mt-0.5 truncate text-slate-700">
+                              {contract.mainContactName || contract.mainContactEmail || "—"}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-md xl:justify-end">
+                        <Link
+                          href={`/contracts/${contract.id}`}
+                          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          View
+                        </Link>
+                        <Link
+                          href={`/contracts/${contract.id}?edit=1#e-signature`}
+                          className="rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-700"
+                        >
+                          Send for signature
+                        </Link>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
+      {activeTab === "all" ? (
         <section className="w-full min-w-0 rounded-b-xl rounded-tr-xl border border-slate-300 bg-slate-50 p-6 shadow-sm">
           <div className="mb-6">
             <div className="flex items-center gap-2">
@@ -1102,7 +1305,7 @@ export function LegalDashboardClient({
             </>
           )}
         </section>
-      )}
+      ) : null}
 
       {approvalModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">

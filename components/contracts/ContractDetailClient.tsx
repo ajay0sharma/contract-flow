@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { PageShell } from "@/components/PageShell";
@@ -702,6 +703,7 @@ export function ContractDetailClient({
   directoryEnabled = false,
   relationshipSection = null,
 }: ContractDetailClientProps) {
+  const searchParams = useSearchParams();
   const [contract, setContract] = useState<ContractRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -756,6 +758,26 @@ export function ContractDetailClient({
   useDeferredEffect(() => {
     void loadContract();
   }, [loadContract]);
+
+  useDeferredEffect(() => {
+    if (searchParams.get("edit") !== "1" || !contract || !isPrivilegedUser) {
+      return;
+    }
+
+    setIsEditing(true);
+  }, [contract, isPrivilegedUser, searchParams]);
+
+  useEffect(() => {
+    if (window.location.hash !== "#e-signature" || !contract) {
+      return;
+    }
+
+    const target = document.getElementById("e-signature");
+
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [contract, isEditing]);
 
   useEffect(() => {
     if (!isPrivilegedUser) {
@@ -1808,7 +1830,26 @@ export function ContractDetailClient({
         }}
       />
 
-      {isLegalUser && contract ? (
+      {isLegalUser && contract?.stage === "awaiting_signature" && !isEditing ? (
+        <section className="mt-6 rounded-2xl border border-teal-100 bg-teal-50 p-6 shadow-sm">
+          <h2 className="text-base font-semibold text-teal-950">
+            Ready for e-signature
+          </h2>
+          <p className="mt-1 text-sm text-teal-900">
+            All required approvals are complete. Edit this record to confirm
+            signer details and create the e-signature envelope.
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="mt-4 rounded-md bg-teal-700 px-4 py-2 text-sm font-medium text-white hover:bg-teal-800"
+          >
+            Edit record to send for signature
+          </button>
+        </section>
+      ) : null}
+
+      {isLegalUser && contract && contract.stage === "awaiting_signature" && isEditing ? (
         <ContractESignatureSection
           contract={contract}
           userEmail={userEmail}

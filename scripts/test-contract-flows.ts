@@ -169,6 +169,32 @@ function runWorkflowUnitTests(): void {
     `stage=${approved.stage}`,
   );
 
+  const awaitingSignatureRecord = {
+    ...approved,
+    stage: "awaiting_signature" as const,
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  };
+
+  assert(
+    "Awaiting signature excluded from pending review view",
+    filterContractRecords([awaitingSignatureRecord], { view: "pending" })
+      .length === 0,
+    `stage=${awaitingSignatureRecord.stage}`,
+  );
+
+  assert(
+    "Awaiting signature appears in signature view",
+    filterContractRecords([awaitingSignatureRecord], { view: "signature" })
+      .length === 1,
+    `stage=${awaitingSignatureRecord.stage}`,
+  );
+
+  assert(
+    "In-review contract excluded from signature view",
+    filterContractRecords([pickedUp], { view: "signature" }).length === 0,
+    `stage=${pickedUp.stage}`,
+  );
+
   const sorted = sortContractRecords(
     [
       { ...draft, createdAt: "2026-01-01T00:00:00.000Z" },
@@ -411,6 +437,28 @@ async function runDatabaseIntegrationTests(): Promise<void> {
       approved.stage !== "legal_review",
       `stage=${approved.stage}`,
     );
+
+    const mergedAfterApproval = await listMergedContractRecords(ORG_ID);
+    const pendingAfterApproval = filterContractRecords(mergedAfterApproval, {
+      view: "pending",
+    });
+    const signatureAfterApproval = filterContractRecords(mergedAfterApproval, {
+      view: "signature",
+    });
+
+    assert(
+      "Approved contract removed from pending review queue",
+      !pendingAfterApproval.some((contract) => contract.id === approved.id),
+      `pending count=${pendingAfterApproval.length}`,
+    );
+
+    if (approved.stage === "awaiting_signature") {
+      assert(
+        "Approved contract appears in signature queue",
+        signatureAfterApproval.some((contract) => contract.id === approved.id),
+        `signature count=${signatureAfterApproval.length}`,
+      );
+    }
   } catch (error) {
     fail(
       "Database integration tests",

@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import {
   buildContractStatusCounts,
+  countAwaitingSignatureContracts,
   countOverduePendingContracts,
+  countPendingReviewContracts,
   filterContractRecords,
   listMergedContractRecords,
   sortContractRecords,
@@ -12,7 +14,7 @@ import { reportError } from "@/lib/error-reporting";
 import { isAdminEmail, isLegalEmail } from "@/lib/legal-access";
 import type { ContractLifecycleStatus } from "@/types/contract";
 
-const VALID_VIEWS = new Set(["all", "pending"]);
+const VALID_VIEWS = new Set(["all", "pending", "signature"]);
 const VALID_SORT_BY = new Set([
   "createdAt",
   "updatedAt",
@@ -24,7 +26,7 @@ const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
 const OVERDUE_CALENDAR_DAYS = 7;
 
-type LegalContractsView = "all" | "pending";
+type LegalContractsView = "all" | "pending" | "signature";
 type LegalContractsSortBy =
   | "createdAt"
   | "updatedAt"
@@ -146,6 +148,8 @@ export async function GET(request: NextRequest) {
     const counts = {
       ...buildContractStatusCounts(allContracts),
       overdue: countOverduePendingContracts(allContracts, overdueCutoff),
+      pendingReview: countPendingReviewContracts(allContracts),
+      awaitingSignature: countAwaitingSignatureContracts(allContracts),
     };
 
     return NextResponse.json({

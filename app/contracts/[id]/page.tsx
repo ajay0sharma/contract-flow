@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { currentUser } from "@clerk/nextjs/server";
 import { ContractDetailClient } from "@/components/contracts/ContractDetailClient";
 import { ContractRelationshipTree } from "@/components/contracts/ContractRelationshipTree";
@@ -48,14 +49,22 @@ export default async function ContractPage({ params }: ContractPageProps) {
     ) : null;
 
   return (
-    <ContractDetailClient
-      contractId={id}
-      userEmail={userEmail}
-      userName={userName}
-      isPrivilegedUser={isPrivilegedUser}
-      isLegalUser={isLegalUser}
-      directoryEnabled={directoryEnabled}
-      relationshipSection={relationshipSection}
-    />
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-5xl px-4 py-10 text-sm text-gray-500">
+          Loading contract record...
+        </div>
+      }
+    >
+      <ContractDetailClient
+        contractId={id}
+        userEmail={userEmail}
+        userName={userName}
+        isPrivilegedUser={isPrivilegedUser}
+        isLegalUser={isLegalUser}
+        directoryEnabled={directoryEnabled}
+        relationshipSection={relationshipSection}
+      />
+    </Suspense>
   );
 }

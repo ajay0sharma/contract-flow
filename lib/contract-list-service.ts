@@ -32,7 +32,7 @@ export type ContractListFilters = {
   requesterEmail?: string;
   search?: string;
   contractStatus?: ContractLifecycleStatus;
-  view?: "all" | "pending";
+  view?: "all" | "pending" | "signature";
 };
 
 function resolveOrganizationIds(organizationId: string): string[] {
@@ -84,6 +84,16 @@ export function filterContractRecords(
 
     if (filters.view === "pending") {
       if (contractStatus !== "draft" && contractStatus !== "pending") {
+        return false;
+      }
+
+      if (contract.stage === "awaiting_signature") {
+        return false;
+      }
+    }
+
+    if (filters.view === "signature") {
+      if (contract.stage !== "awaiting_signature") {
         return false;
       }
     }
@@ -305,6 +315,28 @@ export function buildContractStatusCounts(
   return counts;
 }
 
+export function countAwaitingSignatureContracts(
+  contracts: ContractRecord[],
+): number {
+  return contracts.filter(
+    (contract) => contract.stage === "awaiting_signature",
+  ).length;
+}
+
+export function countPendingReviewContracts(
+  contracts: ContractRecord[],
+): number {
+  return contracts.filter((contract) => {
+    const status =
+      contract.contractStatus ?? deriveContractStatus(contract.stage);
+
+    return (
+      (status === "draft" || status === "pending") &&
+      contract.stage !== "awaiting_signature"
+    );
+  }).length;
+}
+
 export function countOverduePendingContracts(
   contracts: ContractRecord[],
   overdueCutoff: Date,
@@ -315,6 +347,7 @@ export function countOverduePendingContracts(
 
     return (
       status === "pending" &&
+      contract.stage !== "awaiting_signature" &&
       new Date(contract.updatedAt).getTime() < overdueCutoff.getTime()
     );
   }).length;
