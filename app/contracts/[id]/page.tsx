@@ -51,7 +51,7 @@ export default async function ContractPage({ params }: ContractPageProps) {
   return (
     <Suspense
       fallback={
-        <div className="mx-auto max-w-5xl px-4 py-10 text-sm text-gray-500">
+        <div className="mx-auto w-full px-5 py-5 text-sm text-gray-500 lg:px-6 lg:py-6">
           Loading contract record...
         </div>
       }

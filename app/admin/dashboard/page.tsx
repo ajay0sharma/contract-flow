@@ -97,12 +97,12 @@ export default async function AdminDashboardPage() {
           ))}
         </div>
       ) : null}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {cards.map((card) => (
           <Link
             key={card.title}
             href={card.href}
-            className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition hover:border-gray-200"
+            className="flex flex-col gap-1.5 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:border-gray-200"
           >
             <p className="text-sm text-gray-500">{card.title}</p>
             <p className="text-3xl font-light text-gray-900">{card.value}</p>
@@ -111,7 +111,7 @@ export default async function AdminDashboardPage() {
         ))}
       </div>
 
-      <section className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+      <section className="mt-5 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-stone-900">
           Administrator controls
         </h2>
@@ -203,7 +203,7 @@ export default async function AdminDashboardPage() {
         </ul>
       </section>
 
-      <section id="submitted-contracts" className="mt-10 scroll-mt-20">
+      <section id="submitted-contracts" className="mt-6 scroll-mt-16">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-stone-900">
             All submitted contracts
@@ -216,7 +216,7 @@ export default async function AdminDashboardPage() {
         <AdminSubmittedContractsTable contracts={contracts} />
       </section>
 
-      <section id="contract-types" className="mt-10 scroll-mt-20">
+      <section id="contract-types" className="mt-6 scroll-mt-16">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-stone-900">
             Contract types
@@ -230,7 +230,7 @@ export default async function AdminDashboardPage() {
         <ContractTypesAdminForm initialTypes={contractTypes} />
       </section>
 
-      <section id="intake-form" className="mt-10 scroll-mt-20">
+      <section id="intake-form" className="mt-6 scroll-mt-16">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-stone-900">
             Intake form builder
@@ -243,7 +243,7 @@ export default async function AdminDashboardPage() {
         <IntakeFormAdminForm initialForm={intakeForm} />
       </section>
 
-      <section id="workflow-settings" className="mt-10 scroll-mt-20">
+      <section id="workflow-settings" className="mt-6 scroll-mt-16">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-stone-900">
             Workflow settings
@@ -261,7 +261,7 @@ export default async function AdminDashboardPage() {
         />
       </section>
 
-      <section id="workflow-policies" className="mt-10 scroll-mt-20">
+      <section id="workflow-policies" className="mt-6 scroll-mt-16">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-stone-900">
             Workflow policies
@@ -277,7 +277,7 @@ export default async function AdminDashboardPage() {
         />
       </section>
 
-      <section id="user-settings" className="mt-10 scroll-mt-20">
+      <section id="user-settings" className="mt-6 scroll-mt-16">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-stone-900">
             User settings
@@ -287,7 +287,7 @@ export default async function AdminDashboardPage() {
             admins.
           </p>
         </div>
-        <div className="space-y-8">
+        <div className="space-y-6">
           <CreateUserForm />
           <UserRoleTable users={users} />
         </div>

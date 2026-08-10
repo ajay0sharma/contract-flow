@@ -165,7 +165,7 @@ function DatabaseIcon({ className }: { className?: string }) {
 
 function MetricsSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
       {Array.from({ length: 7 }).map((_, index) => (
         <div
           key={index}
@@ -670,11 +670,11 @@ export function LegalDashboardClient({
         </div>
       ) : null}
 
-      <section className="mt-8">
+      <section className="mt-5">
         {loadingMetrics ? (
           <MetricsSkeleton />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
             <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-4 shadow-sm">
               <p className="text-sm font-medium text-indigo-900">Total contracts</p>
               <p className="mt-1 text-2xl font-semibold text-indigo-950">
@@ -731,7 +731,7 @@ export function LegalDashboardClient({
         )}
       </section>
 
-      <div className="mb-6 w-full border-b border-gray-200">
+      <div className="mb-4 w-full border-b border-gray-200">
         <nav className="flex">
           <button
             type="button"
@@ -789,7 +789,7 @@ export function LegalDashboardClient({
       {activeTab === "intake" ? <IntakeSettingsClient /> : null}
 
       {activeTab === "pending" ? (
-        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">
               Pending review queue
@@ -803,7 +803,7 @@ export function LegalDashboardClient({
           {loadingPending ? (
             <TableSkeleton />
           ) : pendingReview.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+            <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
               No contracts are currently pending review.
             </p>
           ) : (
@@ -822,7 +822,7 @@ export function LegalDashboardClient({
                 return (
                   <li
                     key={contract.id}
-                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm"
                   >
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0 flex-1">
@@ -959,7 +959,7 @@ export function LegalDashboardClient({
       ) : null}
 
       {activeTab === "signature" ? (
-        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
           <div className="mb-4">
             <h2 className="text-lg font-semibold text-slate-900">
               Pending signature queue
@@ -974,7 +974,7 @@ export function LegalDashboardClient({
           {loadingSignature ? (
             <TableSkeleton />
           ) : pendingSignature.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+            <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
               No contracts are currently awaiting signature.
             </p>
           ) : (
@@ -985,7 +985,7 @@ export function LegalDashboardClient({
                 return (
                   <li
                     key={contract.id}
-                    className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm"
                   >
                     <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                       <div className="min-w-0 flex-1">
@@ -1074,8 +1074,8 @@ export function LegalDashboardClient({
       ) : null}
 
       {activeTab === "all" ? (
-        <section className="w-full min-w-0 rounded-b-xl rounded-tr-xl border border-slate-300 bg-slate-50 p-6 shadow-sm">
-          <div className="mb-6">
+        <section className="w-full min-w-0 rounded-b-xl rounded-tr-xl border border-slate-300 bg-slate-50 p-5 shadow-sm">
+          <div className="mb-4">
             <div className="flex items-center gap-2">
               <DatabaseIcon className="h-5 w-5 text-slate-700" />
               <h2 className="text-lg font-semibold text-slate-900">

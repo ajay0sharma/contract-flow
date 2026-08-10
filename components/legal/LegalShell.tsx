@@ -1,3 +1,8 @@
+import {
+  PAGE_CONTAINER_CLASS,
+  PAGE_HEADER_SPACING_CLASS,
+} from "@/lib/page-layout";
+
 interface LegalShellProps {
   title: string;
   description?: string;
@@ -6,8 +11,8 @@ interface LegalShellProps {
 
 export function LegalShell({ title, description, children }: LegalShellProps) {
   return (
-    <div className="w-full max-w-none min-w-0 px-6 py-8">
-      <header className="mb-6">
+    <div className={PAGE_CONTAINER_CLASS}>
+      <header className={PAGE_HEADER_SPACING_CLASS}>
         <h1 className="text-2xl font-semibold text-gray-900">{title}</h1>
         {description ? (
           <p className="mt-1 text-sm text-gray-500">{description}</p>

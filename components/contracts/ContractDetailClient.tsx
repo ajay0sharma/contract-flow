@@ -49,7 +49,7 @@ interface ApprovalModalState {
   action: ApprovalAction;
 }
 
-const CARD_CLASS = "rounded-2xl border border-gray-100 bg-white p-6 shadow-sm";
+const CARD_CLASS = "rounded-2xl border border-gray-100 bg-white p-5 shadow-sm";
 const CARD_HEADER_CLASS =
   "mb-4 border-b border-gray-100 pb-3 text-sm font-semibold uppercase tracking-wide text-gray-900";
 const FIELD_LABEL_CLASS =
@@ -1081,7 +1081,7 @@ export function ContractDetailClient({
         </div>
       ) : null}
 
-      <header className="space-y-4 border-b border-gray-200 pb-6">
+      <header className="space-y-4 border-b border-gray-200 pb-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <p className="font-mono text-sm text-gray-500">
             {contract.recordNumber}

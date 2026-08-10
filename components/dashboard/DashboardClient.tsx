@@ -8,6 +8,7 @@ import { NavIcon } from "@/components/layout/NavIcon";
 import { StageBadge } from "@/components/contracts/StageBadge";
 import { EmptyState, SkeletonCard, SkeletonRow } from "@/components/ui/EmptyState";
 import { isSupportEmail } from "@/lib/legal-access";
+import { PAGE_CONTAINER_CLASS } from "@/lib/page-layout";
 import type { ContractRecord, ContractStage } from "@/types/contract";
 
 interface DashboardClientProps {
@@ -76,7 +77,7 @@ function MetricCard({
   iconColor: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+    <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500">{title}</p>
         <span style={{ color: iconColor }}>
@@ -175,8 +176,8 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
   });
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-8">
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div className={PAGE_CONTAINER_CLASS}>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">
             {getGreeting()}, {firstName}
@@ -200,7 +201,7 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
         </div>
       ) : null}
 
-      <div className="mb-8 grid gap-4 sm:grid-cols-3">
+      <div className="mb-5 grid gap-3 sm:grid-cols-3">
         {loading ? (
           <>
             <SkeletonCard />
@@ -235,14 +236,14 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
       </div>
 
       <section className="rounded-2xl border border-gray-100 bg-white shadow-sm">
-        <div className="border-b border-gray-100 px-6 py-4">
+        <div className="border-b border-gray-100 px-5 py-3">
           <h2 className="text-base font-semibold text-gray-900">
             Recent requests
           </h2>
         </div>
 
         {loading ? (
-          <div className="space-y-3 p-6">
+          <div className="space-y-3 p-5">
             {Array.from({ length: 4 }).map((_, index) => (
               <SkeletonRow key={index} />
             ))}
@@ -262,13 +263,13 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
               <table className="min-w-full">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-gray-400">
-                    <th className="px-6 py-3 text-left font-medium">Record</th>
-                    <th className="px-6 py-3 text-left font-medium">Title</th>
-                    <th className="px-6 py-3 text-left font-medium">
+                    <th className="px-5 py-2.5 text-left font-medium">Record</th>
+                    <th className="px-5 py-2.5 text-left font-medium">Title</th>
+                    <th className="px-5 py-2.5 text-left font-medium">
                       Counterparty
                     </th>
-                    <th className="px-6 py-3 text-left font-medium">Stage</th>
-                    <th className="px-6 py-3 text-left font-medium">Updated</th>
+                    <th className="px-5 py-2.5 text-left font-medium">Stage</th>
+                    <th className="px-5 py-2.5 text-left font-medium">Updated</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -277,7 +278,7 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
                       key={contract.id}
                       className="text-sm text-gray-700 hover:bg-gray-50/50"
                     >
-                      <td className="px-6 py-3">
+                      <td className="px-5 py-2.5">
                         <Link
                           href={`/contracts/${contract.id}`}
                           className="font-medium text-[#4A7C59] hover:underline"
@@ -285,7 +286,7 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
                           {contract.recordNumber}
                         </Link>
                       </td>
-                      <td className="px-6 py-3">
+                      <td className="px-5 py-2.5">
                         <Link
                           href={`/contracts/${contract.id}`}
                           className="hover:text-gray-900"
@@ -293,13 +294,13 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
                           {contract.title}
                         </Link>
                       </td>
-                      <td className="px-6 py-3">
+                      <td className="px-5 py-2.5">
                         {contract.companyName || "—"}
                       </td>
-                      <td className="px-6 py-3">
+                      <td className="px-5 py-2.5">
                         <StageBadge stage={contract.stage} />
                       </td>
-                      <td className="px-6 py-3 text-gray-500">
+                      <td className="px-5 py-2.5 text-gray-500">
                         {formatDate(contract.updatedAt)}
                       </td>
                     </tr>
@@ -307,7 +308,7 @@ export function DashboardClient({ displayName }: DashboardClientProps) {
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end border-t border-gray-100 px-6 py-3">
+            <div className="flex justify-end border-t border-gray-100 px-5 py-2.5">
               <Link
                 href="/search"
                 className="text-sm font-medium text-[#4A7C59] hover:underline"

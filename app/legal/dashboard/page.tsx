@@ -38,14 +38,14 @@ export default async function LegalDashboardPage({
 
   return (
     <LegalShell title="Legal dashboard" description={`Welcome back, ${displayName}`}>
-      <div className="grid w-full min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid w-full min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="min-w-0">
           <LegalDashboardClient
             initialTab={initialTab}
             explicitView={explicitView}
           />
         </div>
-        <div className="min-w-0 xl:sticky xl:top-6 xl:self-start">
+        <div className="min-w-0 xl:sticky xl:top-5 xl:self-start">
           <TemplateActivityFeed />
         </div>
       </div>

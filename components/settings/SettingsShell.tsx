@@ -1,4 +1,5 @@
 import { SettingsNav } from "@/components/settings/SettingsNav";
+import { PAGE_CONTAINER_CLASS, PAGE_HEADER_SPACING_CLASS } from "@/lib/page-layout";
 
 interface SettingsShellProps {
   title: string;
@@ -14,7 +15,9 @@ export function SettingsShell({
   children,
 }: SettingsShellProps) {
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-8 lg:flex-row lg:gap-8">
+    <div
+      className={`${PAGE_CONTAINER_CLASS} flex flex-col gap-5 lg:flex-row lg:gap-6`}
+    >
       <aside className="lg:hidden">
         <SettingsNav isAdmin={isAdmin} compact />
       </aside>
@@ -22,7 +25,7 @@ export function SettingsShell({
         <SettingsNav isAdmin={isAdmin} compact />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="mb-6 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+        <header className={`${PAGE_HEADER_SPACING_CLASS} rounded-2xl border border-gray-100 bg-white p-5 shadow-sm`}>
           <h1 className="text-lg font-semibold text-gray-900">{title}</h1>
           {description ? (
             <p className="mt-1 text-sm text-gray-500">{description}</p>
