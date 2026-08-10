@@ -6,6 +6,12 @@ import { PeoplePicker } from "@/components/shared/PeoplePicker";
 import type {
   ContractTypeWorkflowRule,
   WorkflowConfig,
+  WorkflowStepDefinition,
+} from "@/lib/workflow-config-types";
+import {
+  createCustomWorkflowStep,
+  isBuiltInWorkflowStepId,
+  WORKFLOW_STAGE_OPTIONS,
 } from "@/lib/workflow-config-types";
 import type { ContractTypeRecord } from "@/types/contract-template";
 
@@ -87,13 +93,72 @@ export function WorkflowConfigForm({
 
   function updateStep(
     stepId: string,
-    field: "assigneeEmail" | "assigneeName" | "name",
+    field: keyof Pick<
+      WorkflowStepDefinition,
+      "assigneeEmail" | "assigneeName" | "name" | "role" | "stage"
+    >,
     value: string,
   ) {
     setConfig((current) => ({
       ...current,
       steps: current.steps.map((step) =>
         step.id === stepId ? { ...step, [field]: value } : step,
+      ),
+    }));
+  }
+
+  function updateCustomStepMinAmount(stepId: string, value: string) {
+    setConfig((current) => ({
+      ...current,
+      steps: current.steps.map((step) => {
+        if (step.id !== stepId) {
+          return step;
+        }
+
+        const trimmed = value.trim();
+
+        return {
+          ...step,
+          minAmount: trimmed ? Number(trimmed) : undefined,
+        };
+      }),
+    }));
+  }
+
+  function addApprovalStep() {
+    setError(null);
+    setConfig((current) => ({
+      ...current,
+      steps: [...current.steps, createCustomWorkflowStep()],
+    }));
+  }
+
+  function removeApprovalStep(stepId: string) {
+    if (config.steps.length <= 1) {
+      setError("At least one approver step is required in the approval chain.");
+      return;
+    }
+
+    const step = config.steps.find((entry) => entry.id === stepId);
+
+    if (
+      step?.id === "legal" &&
+      !window.confirm(
+        "Remove the legal review step? New contracts will no longer route to legal first unless you add another legal review step.",
+      )
+    ) {
+      return;
+    }
+
+    setError(null);
+    setConfig((current) => ({
+      ...current,
+      steps: current.steps.filter((entry) => entry.id !== stepId),
+      contractTypeWorkflowRules: current.contractTypeWorkflowRules.map(
+        (rule) => ({
+          ...rule,
+          disabledStepIds: rule.disabledStepIds.filter((id) => id !== stepId),
+        }),
       ),
     }));
   }
@@ -200,6 +265,11 @@ export function WorkflowConfigForm({
     event.preventDefault();
     setMessage(null);
     setError(null);
+
+    if (config.steps.length === 0) {
+      setError("Add at least one approver to the approval chain.");
+      return;
+    }
 
     startTransition(async () => {
       try {
@@ -466,22 +536,49 @@ export function WorkflowConfigForm({
       </section>
 
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-stone-900">Approval chain</h2>
-        <p className="mt-1 text-sm text-stone-600">
-          Default sequential steps executed after contract intake.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-stone-900">
+              Approval chain
+            </h2>
+            <p className="mt-1 text-sm text-stone-600">
+              Default sequential approvers executed after contract intake. Add
+              custom approvers or remove steps you do not need.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addApprovalStep}
+            className="rounded-md border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-800 hover:bg-stone-50"
+          >
+            Add approver
+          </button>
+        </div>
         <ol className="mt-4 space-y-4">
-          {config.steps.map((step, index) => (
+          {config.steps.map((step, index) => {
+            const isCustomStep = !isBuiltInWorkflowStepId(step.id);
+
+            return (
             <li
               key={step.id}
               className="rounded-md border border-stone-200 px-4 py-4"
             >
-              <p className="text-sm font-medium text-stone-500">
-                Step {index + 1} · {step.role}
-                {step.minAmount
-                  ? ` · Applies at $${step.minAmount.toLocaleString()}+`
-                  : " · Always required"}
-              </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="text-sm font-medium text-stone-500">
+                  Step {index + 1} · {step.role}
+                  {step.minAmount
+                    ? ` · Applies at $${step.minAmount.toLocaleString()}+`
+                    : " · Always required"}
+                  {isCustomStep ? " · Custom approver" : " · Built-in step"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => removeApprovalStep(step.id)}
+                  className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                >
+                  Remove
+                </button>
+              </div>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <label className="block text-sm">
                   <span className="font-medium text-stone-700">Step name</span>
@@ -494,26 +591,85 @@ export function WorkflowConfigForm({
                     className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-stone-900"
                   />
                 </label>
-                <label className="block text-sm md:col-span-2">
-                  <span className="font-medium text-stone-700">Assignee</span>
-                  <div className="mt-1">
-                    <PeoplePicker
-                      value={
-                        step.assigneeEmail.trim() || step.assigneeName.trim()
-                          ? {
-                              email: step.assigneeEmail,
-                              name: step.assigneeName || step.assigneeEmail,
-                            }
-                          : null
+                {isCustomStep ? (
+                  <label className="block text-sm">
+                    <span className="font-medium text-stone-700">Role label</span>
+                    <input
+                      type="text"
+                      value={step.role}
+                      onChange={(event) =>
+                        updateStep(step.id, "role", event.target.value)
                       }
-                      onChange={(user) => updateStepAssignee(step.id, user)}
-                      placeholder="Search by name or email..."
+                      className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-stone-900"
                     />
-                  </div>
-                </label>
+                  </label>
+                ) : null}
+                {step.id === "department-vp" ? (
+                  <p className="text-sm text-stone-600 md:col-span-2">
+                    Assignee is resolved from the department VP approvers section
+                    using the requester&apos;s department.
+                  </p>
+                ) : (
+                  <label className="block text-sm md:col-span-2">
+                    <span className="font-medium text-stone-700">Assignee</span>
+                    <div className="mt-1">
+                      <PeoplePicker
+                        value={
+                          step.assigneeEmail.trim() || step.assigneeName.trim()
+                            ? {
+                                email: step.assigneeEmail,
+                                name: step.assigneeName || step.assigneeEmail,
+                              }
+                            : null
+                        }
+                        onChange={(user) => updateStepAssignee(step.id, user)}
+                        placeholder="Search by name or email..."
+                      />
+                    </div>
+                  </label>
+                )}
               </div>
+              {isCustomStep ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="block text-sm">
+                    <span className="font-medium text-stone-700">
+                      Workflow stage
+                    </span>
+                    <select
+                      value={step.stage}
+                      onChange={(event) =>
+                        updateStep(step.id, "stage", event.target.value)
+                      }
+                      className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-stone-900"
+                    >
+                      {WORKFLOW_STAGE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-sm">
+                    <span className="font-medium text-stone-700">
+                      Minimum amount ($)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1000}
+                      placeholder="Always required"
+                      value={step.minAmount ?? ""}
+                      onChange={(event) =>
+                        updateCustomStepMinAmount(step.id, event.target.value)
+                      }
+                      className="mt-1 w-full rounded-md border border-stone-300 px-3 py-2 text-stone-900"
+                    />
+                  </label>
+                </div>
+              ) : null}
             </li>
-          ))}
+            );
+          })}
         </ol>
       </section>
 

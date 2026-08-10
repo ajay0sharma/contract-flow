@@ -120,12 +120,25 @@ export function normalizeWorkflowConfig(config: WorkflowConfig): void {
     config.routingRules.splice(1, 0, { ...vpThresholdRule });
   }
 
-  if (!config.steps.some((step) => step.id === "department-vp")) {
-    const legalIndex = config.steps.findIndex((step) => step.id === "legal");
-    config.steps.splice(legalIndex === -1 ? 1 : legalIndex + 1, 0, {
-      ...departmentVpStep,
+  if (config.steps.length === 0) {
+    config.steps.push({
+      id: "legal",
+      name: "Legal Review",
+      role: "Legal",
+      assigneeEmail: "",
+      assigneeName: "",
+      stage: "legal_review",
     });
   }
+
+  config.steps = config.steps.map((step) => ({
+    ...step,
+    id: step.id.trim() || `approver-${Date.now()}`,
+    name: step.name.trim() || "Approval step",
+    role: step.role.trim() || "Approver",
+    assigneeEmail: step.assigneeEmail.trim(),
+    assigneeName: step.assigneeName.trim(),
+  }));
 
   const existingApprovers = config.vpDepartmentApprovers ?? [];
   const existingByDepartment = new Map(
