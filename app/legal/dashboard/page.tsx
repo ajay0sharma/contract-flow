@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { LegalShell } from "@/components/legal/LegalShell";
 import { LegalDashboardClient } from "@/components/legal/LegalDashboardClient";
-import { TemplateActivityFeed } from "@/components/legal/TemplateActivityFeed";
 import { isLegalUser } from "@/lib/legal";
 import { isAdminEmail } from "@/lib/legal-access";
 import { requireAuthenticatedUser } from "@/lib/page-auth";
@@ -38,17 +37,10 @@ export default async function LegalDashboardPage({
 
   return (
     <LegalShell title="Legal dashboard" description={`Welcome back, ${displayName}`}>
-      <div className="grid w-full min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="min-w-0">
-          <LegalDashboardClient
-            initialTab={initialTab}
-            explicitView={explicitView}
-          />
-        </div>
-        <div className="min-w-0 xl:sticky xl:top-5 xl:self-start">
-          <TemplateActivityFeed />
-        </div>
-      </div>
+      <LegalDashboardClient
+        initialTab={initialTab}
+        explicitView={explicitView}
+      />
     </LegalShell>
   );
 }
