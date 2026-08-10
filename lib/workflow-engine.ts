@@ -212,9 +212,15 @@ export function createContractFromIntake(
     attachments,
     relatedEmails: [],
     contractVariables:
-      input.customFields && Object.keys(input.customFields).length > 0
-        ? input.customFields
-        : null,
+      (() => {
+        const merged = {
+          ...(input.customFields ?? {}),
+          ...(input.templateVariables ?? {}),
+        };
+        return Object.keys(merged).length > 0 ? merged : null;
+      })(),
+    generatedDraftPath: null,
+    missingVariables: null,
     auditTrail,
     createdAt: timestamp,
     updatedAt: timestamp,

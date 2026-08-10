@@ -245,6 +245,23 @@ export function buildExecutedDocumentStoragePath(
   return `contracts/${organizationId}/${contractId}/executed/${timestamp}-${safeName}`;
 }
 
+export function buildGeneratedDraftStoragePath(
+  organizationId: string,
+  contractId: string,
+  fileName: string,
+): string {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `contracts/${organizationId}/${contractId}/draft/${safeName}`;
+}
+
+export async function uploadGeneratedDraftDocument(
+  storagePath: string,
+  fileBuffer: Buffer,
+  contentType: string,
+): Promise<void> {
+  await uploadExecutedDocument(storagePath, fileBuffer, contentType);
+}
+
 export async function uploadExecutedDocument(
   storagePath: string,
   fileBuffer: Buffer,

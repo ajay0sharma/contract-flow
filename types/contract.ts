@@ -168,6 +168,7 @@ export interface ContractIntakeInput {
   templateVersion?: number;
   intakeFormId?: string;
   customFields?: Record<string, string>;
+  templateVariables?: Record<string, string>;
 }
 
 export interface ContractRecordUpdateInput {
@@ -231,6 +232,8 @@ export interface ContractRecord {
   activatedAt?: string | null;
   expiredAt?: string | null;
   contractVariables?: Record<string, string> | null;
+  generatedDraftPath?: string | null;
+  missingVariables?: string[] | null;
   workflowSteps: WorkflowStep[];
   currentStepIndex: number;
   auditTrail: AuditEvent[];

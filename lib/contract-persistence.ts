@@ -4,6 +4,12 @@ import { recordContractAuditLog } from "@/lib/audit-log";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { resolveOrganizationIdByRecordNumber } from "@/lib/contract-email-org";
 import {
+  buildPersistedContractVariables,
+  mergeContractTemplateDraft,
+  resolveTemplateVariableValues,
+} from "@/lib/contract-template-merge";
+import { getContractTemplateById } from "@/lib/contract-template-store";
+import {
   findMatchingRelatedEmail,
   hasMatchingRelatedEmail,
   storeProviderMessageId,
@@ -14,6 +20,7 @@ import { appendRelatedEmailToRecord, addContractEmail, normalizeContractRecord }
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getPrismaClient } from "@/lib/prisma";
 import { safeTrim } from "@/lib/string-utils";
+import { captureException } from "@/lib/error-reporting";
 import {
   activateContract,
   approveContractStep,
@@ -180,6 +187,18 @@ function parseContractVariables(
   );
 }
 
+function parseMissingVariables(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const variables = value.filter(
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+  );
+
+  return variables.length > 0 ? variables : null;
+}
+
 export function mapPrismaContractToRecord(record: ContractRow): ContractRecord {
   return {
     id: record.id,
@@ -213,6 +232,7 @@ export function mapPrismaContractToRecord(record: ContractRow): ContractRecord {
     companyProfileId: record.companyProfileId ?? record.organizationId,
     templateId: record.templateId,
     templateVersion: record.templateVersion,
+    intakeFormId: record.intakeFormId,
     stage: record.stage as ContractStage,
     contractStatus: record.contractStatus as ContractLifecycleStatus,
     expiryDate: toIsoString(record.expiryDate),
@@ -220,6 +240,8 @@ export function mapPrismaContractToRecord(record: ContractRow): ContractRecord {
     activatedAt: toIsoString(record.activatedAt),
     expiredAt: toIsoString(record.expiredAt),
     contractVariables: parseContractVariables(record.contractVariables),
+    generatedDraftPath: record.generatedDraftPath,
+    missingVariables: parseMissingVariables(record.missingVariables),
     currentStepIndex: record.currentStepIndex,
     workflowSteps: parseWorkflowSteps(record.workflowSteps),
     auditTrail: parseAuditTrail(record.auditTrail),
@@ -270,6 +292,10 @@ function mapRecordToPrismaData(
     intakeFormId: record.intakeFormId ?? null,
     contractVariables: record.contractVariables
       ? toJsonValue(record.contractVariables)
+      : undefined,
+    generatedDraftPath: record.generatedDraftPath ?? null,
+    missingVariables: record.missingVariables
+      ? toJsonValue(record.missingVariables)
       : undefined,
     stage: record.stage,
     currentStepIndex: record.currentStepIndex,
@@ -339,6 +365,8 @@ export async function saveContractRecord(
       templateVersion: data.templateVersion,
       intakeFormId: data.intakeFormId,
       contractVariables: data.contractVariables,
+      generatedDraftPath: data.generatedDraftPath,
+      missingVariables: data.missingVariables,
       stage: data.stage,
       contractStatus: data.contractStatus,
       ...(data.activatedAt ? { activatedAt: data.activatedAt } : {}),
@@ -404,12 +432,66 @@ export async function createAndPersistContract(
 ): Promise<ContractRecord> {
   const id = randomUUID();
   const recordNumber = await generateUniqueRecordNumber();
-  const record = {
+  let record = {
     ...createContractFromIntake(input, { id, recordNumber }),
     companyProfileId: organizationId,
   };
 
+  if (record.templateId) {
+    const template = await getContractTemplateById(
+      record.templateId,
+      organizationId,
+    );
+    const templateValues = resolveTemplateVariableValues(template, input);
+    record = {
+      ...record,
+      contractVariables: buildPersistedContractVariables(input, templateValues),
+    };
+  }
+
   await saveContractRecord(record);
+
+  if (record.templateId && record.templateVersion) {
+    try {
+      const mergeOutcome = await mergeContractTemplateDraft(record, input);
+
+      if (mergeOutcome) {
+        const missingDetail =
+          mergeOutcome.missingVariables.length > 0
+            ? ` Missing placeholders: ${mergeOutcome.missingVariables.join(", ")}.`
+            : "";
+
+        record = {
+          ...record,
+          generatedDraftPath: mergeOutcome.generatedDraftPath,
+          missingVariables:
+            mergeOutcome.missingVariables.length > 0
+              ? mergeOutcome.missingVariables
+              : null,
+          auditTrail: [
+            ...record.auditTrail,
+            createAuditEvent(
+              input.requesterName,
+              input.requesterEmail,
+              "Draft generated",
+              `Merged ${mergeOutcome.mergedVariables.length} template variable(s) into ${mergeOutcome.draftFileName}.${missingDetail}`,
+            ),
+          ],
+          updatedAt: new Date().toISOString(),
+        };
+
+        await saveContractRecord(record);
+      }
+    } catch (error) {
+      captureException(error, {
+        contractId: record.id,
+        templateId: record.templateId,
+        templateVersion: record.templateVersion,
+        stage: "template_merge",
+      });
+    }
+  }
+
   return record;
 }
 

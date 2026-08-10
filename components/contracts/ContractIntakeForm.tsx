@@ -1012,6 +1012,9 @@ export function ContractIntakeForm({
             Object.keys(customFieldValues).length > 0
               ? customFieldValues
               : undefined,
+          templateVariables: selectedTemplateId
+            ? templateVariableValues
+            : undefined,
         };
 
         const response = await fetch("/api/contracts", {

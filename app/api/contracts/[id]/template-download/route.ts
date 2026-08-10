@@ -3,12 +3,15 @@ import { currentUser } from "@clerk/nextjs/server";
 import { recordTemplateAuditLog } from "@/lib/audit-log";
 import { canViewContractRecord, getContractById } from "@/lib/contract-store";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { mergeContractTemplateDraftFromRecord } from "@/lib/contract-template-merge";
+import { saveContractRecord } from "@/lib/contract-persistence";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getTemplateFileAtVersion } from "@/lib/contract-template-store";
 import { captureException } from "@/lib/error-reporting";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import {
+  createExecutedDocumentSignedUrl,
   createTemplateSignedDownloadUrl,
   getSupabaseStorageSetupMessage,
   isSupabaseStorageConfigured,
@@ -72,37 +75,90 @@ export async function GET(
   }
 
   try {
-    const signedUrl = await createTemplateSignedDownloadUrl(
-      fileReference.storagePath,
-    );
+    let signedUrl: string;
+    let fileName = fileReference.fileName;
+    let isGeneratedDraft = false;
+    let missingVariables = contract.missingVariables ?? [];
+
+    if (contract.generatedDraftPath) {
+      signedUrl = await createExecutedDocumentSignedUrl(
+        contract.generatedDraftPath,
+      );
+      fileName = contract.generatedDraftPath.split("/").pop() ?? fileName;
+      isGeneratedDraft = true;
+    } else {
+      const mergeOutcome = await mergeContractTemplateDraftFromRecord(contract);
+
+      if (mergeOutcome) {
+        signedUrl = await createExecutedDocumentSignedUrl(
+          mergeOutcome.generatedDraftPath,
+        );
+        fileName = mergeOutcome.draftFileName;
+        isGeneratedDraft = true;
+        missingVariables =
+          mergeOutcome.missingVariables.length > 0
+            ? mergeOutcome.missingVariables
+            : [];
+
+        if (!allowMemoryPersistence()) {
+          try {
+            await saveContractRecord({
+              ...contract,
+              generatedDraftPath: mergeOutcome.generatedDraftPath,
+              missingVariables:
+                mergeOutcome.missingVariables.length > 0
+                  ? mergeOutcome.missingVariables
+                  : null,
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (persistError) {
+            captureException(persistError, {
+              contractId: contract.id,
+              generatedDraftPath: mergeOutcome.generatedDraftPath,
+              stage: "persist_generated_draft",
+            });
+          }
+        }
+      } else {
+        signedUrl = await createTemplateSignedDownloadUrl(
+          fileReference.storagePath,
+        );
+      }
+    }
 
     await recordTemplateAuditLog({
       organizationId: contract.companyProfileId,
       entityId: contract.templateId,
       action: "template_downloaded",
-      detail: `Downloaded pinned template version ${fileReference.version} for contract ${contract.recordNumber}.`,
+      detail: isGeneratedDraft
+        ? `Downloaded generated draft for contract ${contract.recordNumber}.`
+        : `Downloaded pinned template version ${fileReference.version} for contract ${contract.recordNumber}.`,
       actorEmail: email,
       actorName: getUserDisplayName(user),
       metadata: {
         contractId: contract.id,
         contractRecordNumber: contract.recordNumber,
         version: fileReference.version,
-        fileName: fileReference.fileName,
+        fileName,
+        isGeneratedDraft,
       },
     });
 
     return NextResponse.json({
       signedUrl,
-      fileName: fileReference.fileName,
+      fileName,
       fileSize: fileReference.fileSize,
       version: fileReference.version,
       templateId: contract.templateId,
+      isGeneratedDraft,
+      missingVariables,
     });
   } catch (error) {
     captureException(error, {
       contractId: contract.id,
       templateId: contract.templateId,
       templateVersion: contract.templateVersion,
+      generatedDraftPath: contract.generatedDraftPath,
       storagePath: fileReference.storagePath,
       actorEmail: email,
     });

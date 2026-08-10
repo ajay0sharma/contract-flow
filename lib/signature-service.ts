@@ -3,6 +3,7 @@ import type { Prisma, SignatureEnvelope } from "@/lib/generated/prisma/client";
 import type { SignatureEnvelopeStatus } from "@/lib/generated/prisma/enums";
 import { writeAuditLog } from "@/lib/audit-log";
 import { getTemplateFileAtVersion } from "@/lib/contract-template-store";
+import { mergeContractTemplateDraftFromRecord } from "@/lib/contract-template-merge";
 import {
   loadContractRecord,
   saveContractRecord,
@@ -16,7 +17,9 @@ import {
 import { sendSignatureEnvelopeViaProvider } from "@/lib/signature-providers";
 import { resolveSignatureApplicationUrl } from "@/lib/signature-settings";
 import {
+  createExecutedDocumentSignedUrl,
   createTemplateSignedDownloadUrl,
+  downloadExecutedDocument,
   downloadTemplateDocument,
   isSupabaseStorageConfigured,
 } from "@/lib/supabase-storage";
@@ -241,6 +244,42 @@ async function resolveContractDocument(
     throw new Error("Template document not found for this contract.");
   }
 
+  if (contract.generatedDraftPath) {
+    const buffer = await downloadExecutedDocument(contract.generatedDraftPath);
+    const downloadUrl = await createExecutedDocumentSignedUrl(
+      contract.generatedDraftPath,
+      3600,
+    );
+    const fileName =
+      contract.generatedDraftPath.split("/").pop() ?? fileReference.fileName;
+
+    return {
+      fileName,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      base64Content: buffer.toString("base64"),
+      downloadUrl,
+    };
+  }
+
+  const mergeOutcome = await mergeContractTemplateDraftFromRecord(contract);
+
+  if (mergeOutcome) {
+    const buffer = await downloadExecutedDocument(mergeOutcome.generatedDraftPath);
+    const downloadUrl = await createExecutedDocumentSignedUrl(
+      mergeOutcome.generatedDraftPath,
+      3600,
+    );
+
+    return {
+      fileName: mergeOutcome.draftFileName,
+      contentType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      base64Content: buffer.toString("base64"),
+      downloadUrl,
+    };
+  }
+
   const buffer = await downloadTemplateDocument(fileReference.storagePath);
   const downloadUrl = await createTemplateSignedDownloadUrl(
     fileReference.storagePath,
@@ -249,7 +288,8 @@ async function resolveContractDocument(
 
   return {
     fileName: fileReference.fileName,
-    contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    contentType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     base64Content: buffer.toString("base64"),
     downloadUrl,
   };

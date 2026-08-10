@@ -26,6 +26,7 @@ import {
   CONTRACT_TEMPLATE_TYPES,
   getContractTypeLabel,
 } from "@/types/contract-template";
+import { openContractDraftDocument } from "@/lib/template-file-access";
 import type {
   AuditEvent,
   ContractAttachment,
@@ -721,6 +722,7 @@ export function ContractDetailClient({
   const [savePending, setSavePending] = useState(false);
   const [departments, setDepartments] = useState<string[]>([]);
   const [endDateError, setEndDateError] = useState<string | null>(null);
+  const [draftDownloadPending, setDraftDownloadPending] = useState(false);
 
   const loadContract = useCallback(async () => {
     setError(null);
@@ -754,6 +756,29 @@ export function ContractDetailClient({
       });
     }
   }, [contractId]);
+
+  async function handleDownloadDraft(): Promise<void> {
+    setDraftDownloadPending(true);
+    setToast(null);
+
+    try {
+      const result = await openContractDraftDocument(contractId);
+
+      if (result.isGeneratedDraft) {
+        void refreshContract();
+      }
+    } catch (downloadError) {
+      setToast({
+        type: "error",
+        message:
+          downloadError instanceof Error
+            ? downloadError.message
+            : "Unable to download the generated draft.",
+      });
+    } finally {
+      setDraftDownloadPending(false);
+    }
+  }
 
   useDeferredEffect(() => {
     void loadContract();
@@ -1748,13 +1773,26 @@ export function ContractDetailClient({
                   : ""}
               </p>
             </div>
-            <a
-              href={`/api/contracts/${contract.id}/template-download`}
-              className="inline-flex rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-gray-50"
+            <button
+              type="button"
+              onClick={() => void handleDownloadDraft()}
+              disabled={draftDownloadPending}
+              className="inline-flex rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Download template
-            </a>
+              {draftDownloadPending
+                ? "Preparing download..."
+                : contract.generatedDraftPath
+                  ? "Download generated draft"
+                  : "Download template draft"}
+            </button>
           </div>
+
+          {contract.missingVariables && contract.missingVariables.length > 0 ? (
+            <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Some template placeholders were not filled:{" "}
+              {contract.missingVariables.join(", ")}.
+            </div>
+          ) : null}
 
           {variableEntries.length > 0 ? (
             <div className="mt-4 border-t border-gray-100 pt-4">

@@ -37,6 +37,8 @@ import {
   getCurrentApprover,
   resolveWorkflowSteps,
 } from "@/lib/workflow-engine";
+import { mergeDocxPlaceholders } from "@/lib/contract-template-docx";
+import JSZip from "jszip";
 
 config({ path: resolve(process.cwd(), ".env.local") });
 config({ path: resolve(process.cwd(), ".env") });
@@ -483,10 +485,65 @@ async function runDatabaseIntegrationTests(): Promise<void> {
   }
 }
 
+async function runTemplateMergeUnitTests(): Promise<void> {
+  const zip = new JSZip();
+  zip.file(
+    "word/document.xml",
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body>
+        <w:p><w:r><w:t>Hello {{COMPANY_NAME}} for {{START_DATE}}.</w:t></w:r></w:p>
+      </w:body>
+    </w:document>`,
+  );
+  zip.file("[Content_Types].xml", "<Types></Types>");
+  zip.file("_rels/.rels", "<Relationships></Relationships>");
+
+  const sourceBuffer = Buffer.from(
+    await zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" }),
+  );
+
+  const merged = await mergeDocxPlaceholders(sourceBuffer, {
+    COMPANY_NAME: "Acme Corp",
+    START_DATE: "2026-01-01",
+  });
+
+  const mergedZip = await JSZip.loadAsync(merged.buffer);
+  const mergedXml = await mergedZip.file("word/document.xml")?.async("string");
+
+  assert(
+    "Template merge replaces placeholders",
+    Boolean(
+      mergedXml?.includes("Acme Corp") &&
+        mergedXml.includes("2026-01-01") &&
+        !mergedXml.includes("{{COMPANY_NAME}}"),
+    ),
+    mergedXml ?? "missing document.xml",
+  );
+
+  assert(
+    "Template merge tracks merged variables",
+    merged.mergedVariables.includes("COMPANY_NAME") &&
+      merged.mergedVariables.includes("START_DATE") &&
+      merged.missingVariables.length === 0,
+    `merged=${merged.mergedVariables.join(",")} missing=${merged.missingVariables.join(",")}`,
+  );
+
+  const partialMerge = await mergeDocxPlaceholders(sourceBuffer, {
+    COMPANY_NAME: "Acme Corp",
+  });
+
+  assert(
+    "Template merge reports unfilled placeholders",
+    partialMerge.missingVariables.includes("START_DATE"),
+    partialMerge.missingVariables.join(", "),
+  );
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
   runWorkflowUnitTests();
+  await runTemplateMergeUnitTests();
   await runEmailConfigUnitTests();
   await runDatabaseIntegrationTests();
 
