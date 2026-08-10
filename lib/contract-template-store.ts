@@ -808,19 +808,23 @@ export async function createContractTemplate(
 
     const template = mapTemplateRecord(record);
 
-    await recordTemplateAuditLog({
-      organizationId: input.organizationId,
-      entityId: template.id,
-      action: "template_created",
-      detail: `Template "${template.title}" created for ${getContractTypeLabel(template.contractType)} contracts`,
-      actorEmail: input.uploadedById,
-      actorName: options?.actorName ?? null,
-      metadata: {
-        templateTitle: template.title,
-        contractType: template.contractType,
-        version: template.version,
-      },
-    });
+    try {
+      await recordTemplateAuditLog({
+        organizationId: input.organizationId,
+        entityId: template.id,
+        action: "template_created",
+        detail: `Template "${template.title}" created for ${getContractTypeLabel(template.contractType)} contracts`,
+        actorEmail: input.uploadedById,
+        actorName: options?.actorName ?? null,
+        metadata: {
+          templateTitle: template.title,
+          contractType: template.contractType,
+          version: template.version,
+        },
+      });
+    } catch (auditError) {
+      console.error("Failed to record template audit log:", auditError);
+    }
 
     return {
       template,
@@ -830,11 +834,9 @@ export async function createContractTemplate(
     };
   } catch (error) {
     console.error("Failed to create contract template:", error);
-    const result = createMemoryTemplate(input);
-    return {
-      ...result,
-      placeholderWarning: options?.placeholderWarning ?? null,
-    };
+    throw error instanceof Error
+      ? error
+      : new Error("Failed to create contract template.");
   }
 }
 
@@ -1127,7 +1129,9 @@ export async function updateContractTemplate(
     };
   } catch (error) {
     console.error("Failed to update contract template:", error);
-    return persistMemoryTemplateUpdate();
+    throw error instanceof Error
+      ? error
+      : new Error("Failed to update contract template.");
   }
 }
 

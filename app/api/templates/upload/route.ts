@@ -1,6 +1,5 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import {
   parseCreateFormData,
   parseUpdateFormData,
@@ -12,6 +11,7 @@ import {
 } from "@/lib/contract-template-store";
 import { reportError } from "@/lib/error-reporting";
 import { isAdminEmail, isLegalEmail } from "@/lib/legal-access";
+import { resolveTemplateOrganizationId } from "@/lib/template-route-auth";
 import { validateTemplateFileSize } from "@/lib/supabase-storage";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import { getContractTypeLabel } from "@/types/contract-template";
@@ -94,7 +94,19 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError("Contract type is required.", 400);
   }
 
-  const organizationId = resolveClauseLibraryOrganizationId();
+  let organizationId: string;
+
+  try {
+    organizationId = await resolveTemplateOrganizationId(email);
+  } catch (error) {
+    return jsonError(
+      error instanceof Error
+        ? error.message
+        : "You do not have access to this client organization.",
+      403,
+    );
+  }
+
   const actorName = getUserDisplayName(user);
 
   try {
@@ -213,6 +225,9 @@ export async function POST(request: Request): Promise<Response> {
       return jsonError(message, 500);
     }
 
-    return jsonError("Upload failed. Please try again.", 500);
+    return jsonError(
+      message || "Upload failed. Please try again.",
+      500,
+    );
   }
 }

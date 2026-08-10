@@ -3,8 +3,8 @@ import {
   isTemplateManager,
   requireAuthenticatedTemplateReader,
   requireTemplateManager,
+  resolveTemplateOrganizationId,
 } from "@/lib/template-route-auth";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { parseCreateFormData } from "@/lib/contract-template-api";
 import {
   createContractTemplate,
@@ -28,9 +28,25 @@ export async function GET(request: NextRequest) {
     return auth.response;
   }
 
-  const orgFromParam = request.nextUrl.searchParams.get("organizationId")?.trim();
-  const organizationId =
-    orgFromParam || resolveClauseLibraryOrganizationId();
+  let organizationId: string;
+
+  try {
+    organizationId = await resolveTemplateOrganizationId(
+      auth.actor.email,
+      request,
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "You do not have access to this client organization.",
+      },
+      { status: 403 },
+    );
+  }
+
   const templates = isTemplateManager(auth.actor.email)
     ? await listContractTemplates(organizationId)
     : await listActiveContractTemplates(organizationId);
@@ -45,7 +61,7 @@ export async function POST(request: NextRequest) {
     return auth.response;
   }
 
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const organizationId = await resolveTemplateOrganizationId(auth.actor.email);
   let formData: FormData;
 
   try {

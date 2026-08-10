@@ -1,5 +1,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { resolveActiveOrganizationId, resolveActiveOrganizationIdFromRequest } from "@/lib/organization-context";
+import { requireOrganizationAccess } from "@/lib/organization-membership";
 import { isAdminEmail, isLegalEmail } from "@/lib/legal-access";
 import { getUserDisplayName } from "@/lib/user-display-name";
 
@@ -32,6 +34,18 @@ export async function requireAuthenticatedTemplateReader():
 
 export function isTemplateManager(email: string): boolean {
   return isLegalEmail(email) || isAdminEmail(email);
+}
+
+export async function resolveTemplateOrganizationId(
+  email: string,
+  request?: Request,
+): Promise<string> {
+  const organizationId = request
+    ? await resolveActiveOrganizationIdFromRequest(email, request)
+    : await resolveActiveOrganizationId(email);
+
+  await requireOrganizationAccess(email, organizationId);
+  return organizationId;
 }
 
 export async function requireTemplateManager():

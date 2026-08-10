@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { openTemplateDocument } from "@/lib/template-file-access";
@@ -313,7 +312,6 @@ export function ContractTemplatesClient({
   organizationId,
   isLegalUser,
 }: ContractTemplatesClientProps) {
-  const router = useRouter();
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [templates, setTemplates] = useState(initialTemplates);
@@ -448,7 +446,6 @@ export function ContractTemplatesClient({
     closeTimerRef.current = setTimeout(() => {
       void (async () => {
         await refreshTemplates();
-        router.refresh();
         closeEditor();
       })();
     }, 1500);
@@ -566,7 +563,6 @@ export function ContractTemplatesClient({
       );
       setDeletePrompt(null);
       await refreshTemplates();
-      router.refresh();
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -669,6 +665,11 @@ export function ContractTemplatesClient({
         mergeTemplateLists([body.template!], current),
       );
 
+      if (editorMode === "create") {
+        setTypeFilter("");
+        setSearchQuery("");
+      }
+
       if (editorMode === "edit") {
         setEditingTemplate(body.template);
       }
@@ -700,7 +701,6 @@ export function ContractTemplatesClient({
     }
 
     await refreshTemplates();
-    router.refresh();
     closeEditor();
   }
 

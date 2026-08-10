@@ -2,10 +2,10 @@ import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { ContractTemplatesClient } from "@/components/templates/ContractTemplatesClient";
 import { SettingsShell } from "@/components/settings/SettingsShell";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { listContractTypes } from "@/lib/contract-type-store";
 import { listContractTemplates } from "@/lib/contract-template-store";
 import { isAdminEmail, isLegalEmail, canManagePlatformSettings } from "@/lib/legal-access";
+import { resolveActiveOrganizationId } from "@/lib/organization-context";
 
 export default async function ContractTemplatesPage() {
   const user = await currentUser();
@@ -20,7 +20,7 @@ export default async function ContractTemplatesPage() {
     redirect("/dashboard");
   }
 
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const organizationId = await resolveActiveOrganizationId(email);
   const [templates, contractTypes] = await Promise.all([
     listContractTemplates(organizationId),
     listContractTypes(organizationId),
