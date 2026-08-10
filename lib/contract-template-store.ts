@@ -466,11 +466,9 @@ function listMemoryTemplateVersions(
 }
 
 function buildVariableCreateData(
-  templateId: string,
   variables: TemplateVariableInput[],
-): Prisma.TemplateVariableCreateManyInput[] {
+): Prisma.TemplateVariableCreateManyTemplateInput[] {
   return variables.map((variable, index) => ({
-    templateId,
     name: variable.name,
     label: variable.label,
     fieldType: variable.fieldType,
@@ -792,7 +790,7 @@ export async function createContractTemplate(
           lastUpdatedById: input.uploadedById,
           variables: {
             createMany: {
-              data: buildVariableCreateData(templateId, input.variables),
+              data: buildVariableCreateData(input.variables),
             },
           },
         },
@@ -1024,7 +1022,7 @@ export async function updateContractTemplate(
             ? {
                 variables: {
                   createMany: {
-                    data: buildVariableCreateData(existing.id, input.variables),
+                    data: buildVariableCreateData(input.variables),
                   },
                 },
               }

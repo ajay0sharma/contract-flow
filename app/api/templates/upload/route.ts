@@ -94,10 +94,16 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError("Contract type is required.", 400);
   }
 
+  const requestedOrganizationId =
+    String(formData.get("organizationId") ?? "").trim() || null;
+
   let organizationId: string;
 
   try {
-    organizationId = await resolveTemplateOrganizationId(email);
+    organizationId = await resolveTemplateOrganizationId(
+      email,
+      requestedOrganizationId,
+    );
   } catch (error) {
     return jsonError(
       error instanceof Error

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { resolveActiveOrganizationId } from "@/lib/organization-context";
 import {
   getIntakeConfiguration,
   saveIntakeConfiguration,
@@ -19,7 +19,8 @@ export async function GET() {
   }
 
   try {
-    const configuration = await getIntakeConfiguration();
+    const organizationId = await resolveActiveOrganizationId(auth.actor.email);
+    const configuration = await getIntakeConfiguration(organizationId);
     return NextResponse.json(configuration);
   } catch (error) {
     reportError(error, { route: "GET /api/legal/intake-config" });
@@ -49,7 +50,10 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const organizationId = resolveClauseLibraryOrganizationId(body.organizationId);
+  const organizationId = await resolveActiveOrganizationId(
+    auth.actor.email,
+    body.organizationId,
+  );
   const contractTypes = Array.isArray(body.contractTypes) ? body.contractTypes : [];
   const templates = Array.isArray(body.templates) ? body.templates : [];
 

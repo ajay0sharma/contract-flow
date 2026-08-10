@@ -38,11 +38,12 @@ export function isTemplateManager(email: string): boolean {
 
 export async function resolveTemplateOrganizationId(
   email: string,
-  request?: Request,
+  source?: Request | string | null,
 ): Promise<string> {
-  const organizationId = request
-    ? await resolveActiveOrganizationIdFromRequest(email, request)
-    : await resolveActiveOrganizationId(email);
+  const organizationId =
+    source instanceof Request
+      ? await resolveActiveOrganizationIdFromRequest(email, source)
+      : await resolveActiveOrganizationId(email, source);
 
   await requireOrganizationAccess(email, organizationId);
   return organizationId;

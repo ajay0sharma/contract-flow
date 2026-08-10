@@ -585,6 +585,7 @@ export function ContractTemplatesClient({
     formData.append("variables", JSON.stringify(values.variables));
     formData.append("isActive", String(values.isActive));
     formData.append("isDefault", String(values.isDefault));
+    formData.append("organizationId", organizationId);
 
     if (values.file) {
       formData.append("file", values.file);

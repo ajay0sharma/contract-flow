@@ -539,11 +539,78 @@ async function runTemplateMergeUnitTests(): Promise<void> {
   );
 }
 
+async function runTemplatePersistenceTests(): Promise<void> {
+  if (!isDatabaseConfigured()) {
+    pass("Template persistence tests", "Skipped without DATABASE_URL");
+    return;
+  }
+
+  const { createContractTemplate, listContractTemplates } = await import(
+    "@/lib/contract-template-store"
+  );
+  const { getPrismaClient } = await import("@/lib/prisma");
+
+  const templateId = `template-test-${Date.now()}`;
+
+  try {
+    const created = await createContractTemplate({
+      id: templateId,
+      organizationId: ORG_ID,
+      title: "Automated template persistence test",
+      contractType: "nda",
+      description: "Created by scripts/test-contract-flows.ts",
+      file: {
+        fileName: "test-template.docx",
+        storagePath: `${ORG_ID}/${templateId}/v1/test-template.docx`,
+        fileSize: 1024,
+      },
+      variables: [
+        {
+          name: "COMPANY_NAME",
+          label: "Company name",
+          fieldType: "text",
+          isRequired: true,
+          displayOrder: 0,
+        },
+      ],
+      uploadedById: LEGAL_USER.email,
+      isActive: true,
+      showInIntake: true,
+      isDefault: false,
+    });
+
+    const listed = await listContractTemplates(ORG_ID);
+
+    assert(
+      "Created template appears in template list",
+      listed.some((template) => template.id === created.template.id),
+      `created=${created.template.id}`,
+    );
+  } catch (error) {
+    fail(
+      "Template persistence tests",
+      error instanceof Error ? error.message : "Unknown template persistence error",
+    );
+  } finally {
+    try {
+      const prisma = getPrismaClient();
+      await prisma.contractTemplate.delete({ where: { id: templateId } });
+      pass("Template persistence cleanup", `Deleted test template ${templateId}`);
+    } catch (error) {
+      fail(
+        "Template persistence cleanup",
+        error instanceof Error ? error.message : "Could not delete test template",
+      );
+    }
+  }
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
   runWorkflowUnitTests();
   await runTemplateMergeUnitTests();
+  await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();
   await runDatabaseIntegrationTests();
 
