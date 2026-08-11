@@ -46,9 +46,17 @@ export interface WorkflowStep {
   assigneeEmail: string;
   assigneeName: string;
   status: WorkflowStepStatus;
+  assignedAt?: string;
   completedAt?: string;
   note?: string;
 }
+
+export type ApprovalReminderType =
+  | "reminder_1"
+  | "reminder_3"
+  | "reminder_7"
+  | "reminder_14"
+  | "escalation";
 
 export interface AuditEvent {
   id: string;

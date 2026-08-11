@@ -38,6 +38,7 @@ export async function POST(
       assigneeEmail?: string;
       assigneeName?: string;
       note?: string;
+      targetAssigneeEmail?: string;
     };
 
     try {
@@ -45,6 +46,7 @@ export async function POST(
         assigneeEmail?: string;
         assigneeName?: string;
         note?: string;
+        targetAssigneeEmail?: string;
       };
     } catch {
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
@@ -53,6 +55,8 @@ export async function POST(
     const assigneeEmail = safeTrim(body.assigneeEmail ?? "").toLowerCase();
     const assigneeName = safeTrim(body.assigneeName ?? "");
     const note = safeTrim(body.note ?? "") || undefined;
+    const targetAssigneeEmail =
+      safeTrim(body.targetAssigneeEmail ?? "").toLowerCase() || undefined;
 
     if (!assigneeEmail || !isValidEmail(assigneeEmail)) {
       return NextResponse.json(
@@ -74,6 +78,7 @@ export async function POST(
       { email: assigneeEmail, name: assigneeName },
       { email: auth.actor.email, name: auth.actor.name },
       note,
+      targetAssigneeEmail,
     );
 
     await writeAuditLog({

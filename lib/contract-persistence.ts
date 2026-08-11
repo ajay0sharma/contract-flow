@@ -18,6 +18,7 @@ import { sendContractRecordEmail } from "@/lib/contract-email-service";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { prepareContractForWorkflowAction } from "@/lib/legal-assignment";
 import { applyRenewalSettingsToRecord } from "@/lib/renewal-workflow";
+import { sendContractIntakeNotification } from "@/lib/contract-notifications";
 import { appendRelatedEmailToRecord, addContractEmail, normalizeContractRecord } from "@/lib/contract-store";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getPrismaClient } from "@/lib/prisma";
@@ -528,6 +529,15 @@ export async function createAndPersistContract(
     }
   }
 
+  try {
+    await sendContractIntakeNotification(record);
+  } catch (notificationError) {
+    captureException(notificationError, {
+      contractId: record.id,
+      stage: "intake_notification",
+    });
+  }
+
   return record;
 }
 
@@ -595,6 +605,7 @@ export async function reassignAndPersist(
   newAssignee: { email: string; name: string },
   actor: { email: string; name: string },
   note?: string,
+  targetAssigneeEmail?: string,
 ): Promise<ContractRecord> {
   const contract = await loadContractRecord(contractId, organizationId);
 
@@ -607,6 +618,7 @@ export async function reassignAndPersist(
     newAssignee,
     actor,
     note,
+    targetAssigneeEmail,
   );
   await saveContractRecord(updated);
   return updated;

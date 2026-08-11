@@ -77,6 +77,12 @@ function waitingSinceDate(
   contract: ContractRecord,
   stepIndex: number,
 ): string {
+  const step = contract.workflowSteps[stepIndex];
+
+  if (step?.assignedAt?.trim()) {
+    return step.assignedAt;
+  }
+
   for (let index = stepIndex - 1; index >= 0; index -= 1) {
     const completedAt = contract.workflowSteps[index]?.completedAt;
 
@@ -213,19 +219,23 @@ export function WorkflowTimeline({
       });
   }, [contract.id, contract.stage, isPrivilegedUser]);
 
-  const currentStep = contract.workflowSteps.find(
-    (step) => step.status === "current",
-  );
   const rejectedStep = contract.workflowSteps.find(
     (step) => step.status === "rejected",
   );
   const normalizedUserEmail = userEmail.trim().toLowerCase();
-  const isCurrentAssignee =
-    currentStep?.assigneeEmail.trim().toLowerCase() === normalizedUserEmail;
   const canPickupAndAct =
     isPrivilegedUser && isAwaitingLegalPickup(contract);
-  const canActOnCurrentStep =
-    currentStep && (isCurrentAssignee || canPickupAndAct);
+
+  function canActOnStep(step: WorkflowStep): boolean {
+    const isAssignee =
+      step.assigneeEmail.trim().toLowerCase() === normalizedUserEmail;
+
+    if (isAssignee) {
+      return true;
+    }
+
+    return canPickupAndAct && step.id === "legal";
+  }
   const canReassign =
     isPrivilegedUser &&
     isAwaitingApproval(contract) &&
@@ -303,7 +313,7 @@ export function WorkflowTimeline({
                         waitingSinceDate(contract, index),
                       )}
                     </p>
-                    {canActOnCurrentStep && step.id === currentStep?.id ? (
+                    {step.status === "current" && canActOnStep(step) ? (
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -311,7 +321,9 @@ export function WorkflowTimeline({
                           onClick={onApprove}
                           className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                         >
-                          {canPickupAndAct ? "Pick up and approve" : "Approve"}
+                          {canPickupAndAct && step.id === "legal"
+                            ? "Pick up and approve"
+                            : "Approve"}
                         </button>
                         <button
                           type="button"
@@ -319,7 +331,9 @@ export function WorkflowTimeline({
                           onClick={onReject}
                           className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-60"
                         >
-                          {canPickupAndAct ? "Pick up and reject" : "Reject"}
+                          {canPickupAndAct && step.id === "legal"
+                            ? "Pick up and reject"
+                            : "Reject"}
                         </button>
                       </div>
                     ) : null}

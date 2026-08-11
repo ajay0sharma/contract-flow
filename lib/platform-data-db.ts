@@ -16,6 +16,7 @@ import {
 import { allowMemoryPersistence, requireDatabaseConfigured } from "@/lib/persistence-mode";
 import { getPrismaClient } from "@/lib/prisma";
 import { defaultWorkflowPolicy, type WorkflowConfig, type WorkflowPolicy } from "@/lib/workflow-config-types";
+import { normalizeWorkflowPolicy } from "@/lib/workflow-policy-normalize";
 import {
   getDefaultWorkflowConfig,
 } from "@/lib/workflow-store-defaults";
@@ -238,7 +239,7 @@ export async function hydratePlatformDataFromDatabase(): Promise<void> {
     );
     setCachedWorkflowPolicy(
       DEFAULT_PLATFORM_ORGANIZATION_ID,
-      settings.workflowPolicy as unknown as WorkflowPolicy,
+      normalizeWorkflowPolicy(settings.workflowPolicy),
     );
   } else {
     setCachedWorkflowConfig(
@@ -329,12 +330,12 @@ export async function loadWorkflowSettingsFromDatabase(
 
   if (settings) {
     const config = settings.workflowConfig as unknown as WorkflowConfig;
-    const policy = settings.workflowPolicy as unknown as WorkflowPolicy;
+    const policy = normalizeWorkflowPolicy(settings.workflowPolicy);
     setCachedWorkflowConfig(organizationId, config);
     setCachedWorkflowPolicy(organizationId, policy);
     return {
       config: cloneWorkflowConfig(config),
-      policy: { ...policy },
+      policy,
     };
   }
 

@@ -114,6 +114,14 @@ enum RenewalReminderType {
   action_deadline
 }
 
+enum ApprovalReminderType {
+  reminder_1
+  reminder_3
+  reminder_7
+  reminder_14
+  escalation
+}
+
 enum PoProvider {
   coupa
   sap
@@ -234,6 +242,7 @@ model Contract {
   clauseUsages                ClauseUsage[]
   signatureEnvelopes          SignatureEnvelope[]
   renewalReminders            ContractRenewalReminder[]
+  approvalReminders           ContractApprovalReminder[]
   createdAt                   DateTime             @default(now())
   updatedAt                   DateTime             @updatedAt
 
@@ -255,6 +264,21 @@ model ContractRenewalReminder {
   contractId     String
   contract       Contract             @relation(fields: [contractId], references: [id], onDelete: Cascade)
   reminderType   RenewalReminderType
+  recipientEmail String
+  sentAt         DateTime             @default(now())
+
+  @@unique([contractId, reminderType, recipientEmail])
+  @@index([organizationId])
+  @@index([contractId])
+  @@index([sentAt])
+}
+
+model ContractApprovalReminder {
+  id             String               @id @default(cuid())
+  organizationId String
+  contractId     String
+  contract       Contract             @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  reminderType   ApprovalReminderType
   recipientEmail String
   sentAt         DateTime             @default(now())
 

@@ -4,6 +4,7 @@ import {
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import type { WorkflowPolicy } from "@/lib/workflow-config-types";
 import { defaultWorkflowPolicy } from "@/lib/workflow-config-types";
+import { normalizeWorkflowPolicy } from "@/lib/workflow-policy-normalize";
 import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 
 const globalStore = globalThis as typeof globalThis & {
@@ -26,9 +27,11 @@ export function getWorkflowPolicy(
       });
     }
 
-    return { ...globalStore.__workflowPolicyByOrg.get(organizationId)! };
+    return normalizeWorkflowPolicy(
+      globalStore.__workflowPolicyByOrg.get(organizationId)!,
+    );
   }
 
   const cached = getCachedWorkflowPolicy(organizationId);
-  return { ...(cached ?? defaultWorkflowPolicy) };
+  return normalizeWorkflowPolicy(cached ?? defaultWorkflowPolicy);
 }

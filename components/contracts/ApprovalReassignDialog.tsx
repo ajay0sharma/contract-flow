@@ -43,12 +43,13 @@ export function ApprovalReassignDialog({
   }
 
   async function handleSubmit(): Promise<void> {
-    if (!contract || !selectedAssignee?.email.trim()) {
+    if (!contract || !selectedAssignee?.email.trim() || !currentApprover) {
       setError("Search for and select a person to assign this approval to.");
       return;
     }
 
     const contractId = contract.id;
+    const targetAssigneeEmail = currentApprover.assigneeEmail;
     setIsSaving(true);
     setError(null);
 
@@ -60,6 +61,7 @@ export function ApprovalReassignDialog({
           assigneeEmail: selectedAssignee.email,
           assigneeName: selectedAssignee.name,
           note: note.trim() || undefined,
+          targetAssigneeEmail,
         }),
       });
 

@@ -4,21 +4,14 @@ import { writeAuditLog } from "@/lib/audit-log";
 import { mapContractWorkflowActionError } from "@/lib/contract-approval-errors";
 import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import {
+  sendContractApprovalNotification,
+} from "@/lib/contract-notifications";
+import {
   approveAndPersist,
 } from "@/lib/contract-persistence";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { reportError } from "@/lib/error-reporting";
 import { getUserDisplayName } from "@/lib/user-display-name";
-import { getCurrentApprover } from "@/lib/workflow-engine";
-
-function sendNotificationEmail(
-  to: string,
-  subject: string,
-  body: string,
-): void {
-  // lib/email-sources.ts defines source types only; no send helper exists yet.
-  console.info(`email would be sent to ${to}`, { subject, body });
-}
 
 export async function POST(
   request: NextRequest,
@@ -60,7 +53,6 @@ export async function POST(
       note = undefined;
     }
 
-    const previousStepIndex = existing.currentStepIndex;
     const record = await approveAndPersist(
       id,
       organizationId,
@@ -87,32 +79,10 @@ export async function POST(
       console.error("Failed to record contract approval audit log:", auditError);
     }
 
-    if (record.currentStepIndex > previousStepIndex) {
-      const nextApprover = getCurrentApprover(record);
-
-      if (nextApprover) {
-        sendNotificationEmail(
-          nextApprover.assigneeEmail,
-          `Contract approval needed: ${record.title}`,
-          [
-            `Hello ${nextApprover.assigneeName},`,
-            "",
-            `Contract ${record.recordNumber} (${record.title}) is ready for your review.`,
-          ].join("\n"),
-        );
-      }
-    }
-
-    if (record.stage === "active" || record.stage === "awaiting_signature") {
-      sendNotificationEmail(
-        record.requesterEmail,
-        `Contract approved: ${record.title}`,
-        [
-          `Hello ${record.requesterName},`,
-          "",
-          `Your contract request ${record.recordNumber} (${record.title}) has completed all required approvals.`,
-        ].join("\n"),
-      );
+    try {
+      await sendContractApprovalNotification(record);
+    } catch (notificationError) {
+      console.error("Failed to send contract approval notification:", notificationError);
     }
 
     return NextResponse.json(record);

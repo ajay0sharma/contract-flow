@@ -10,7 +10,14 @@ interface WorkflowPolicyFormProps {
 }
 
 const policyFields: Array<{
-  key: keyof WorkflowPolicy;
+  key: keyof Pick<
+    WorkflowPolicy,
+    | "requireAllApprovers"
+    | "notifyAssigneesByEmail"
+    | "allowParallelApprovals"
+    | "autoActivateAfterFinalApproval"
+    | "notifyEscalationContact"
+  >;
   label: string;
   description: string;
 }> = [
@@ -18,25 +25,31 @@ const policyFields: Array<{
     key: "requireAllApprovers",
     label: "Require all approvers",
     description:
-      "Every step in the approval chain must complete before the contract advances.",
+      "In parallel mode, every active approval must complete before the contract advances. When disabled, the first completed approval can finalize the workflow.",
   },
   {
     key: "notifyAssigneesByEmail",
     label: "Notify assignees by email",
     description:
-      "Send email notifications when a contract is routed to an approver.",
+      "Send email notifications when a contract is routed to an approver, approved, rejected, or escalated.",
   },
   {
     key: "allowParallelApprovals",
     label: "Allow parallel approvals",
     description:
-      "When enabled, multiple approval steps can be active at the same time.",
+      "When enabled, all approval steps become active at intake so approvers can review concurrently.",
   },
   {
     key: "autoActivateAfterFinalApproval",
     label: "Auto-activate after final approval",
     description:
       "Move contracts to Active automatically once the last approval is recorded.",
+  },
+  {
+    key: "notifyEscalationContact",
+    label: "Notify escalation contact",
+    description:
+      "Include the escalation contact on overdue approval escalation emails.",
   },
 ];
 
@@ -49,7 +62,16 @@ export function WorkflowPolicyForm({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function toggleField(key: keyof WorkflowPolicy) {
+  function toggleField(
+    key: keyof Pick<
+      WorkflowPolicy,
+      | "requireAllApprovers"
+      | "notifyAssigneesByEmail"
+      | "allowParallelApprovals"
+      | "autoActivateAfterFinalApproval"
+      | "notifyEscalationContact"
+    >,
+  ) {
     setPolicy((current) => ({ ...current, [key]: !current[key] }));
   }
 
@@ -105,6 +127,84 @@ export function WorkflowPolicyForm({
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-stone-900">
+          Approval reminders and escalation
+        </h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Overdue approvals trigger reminder emails and optional escalation to a
+          backup contact.
+        </p>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <label className="block text-sm">
+            <span className="font-medium text-stone-900">
+              Reminder days while waiting
+            </span>
+            <input
+              type="text"
+              value={policy.approvalReminderDays.join(", ")}
+              onChange={(event) =>
+                setPolicy((current) => ({
+                  ...current,
+                  approvalReminderDays: event.target.value
+                    .split(",")
+                    .map((value) => Number.parseInt(value.trim(), 10))
+                    .filter(
+                      (value) =>
+                        Number.isFinite(value) && [1, 3, 7, 14].includes(value),
+                    ),
+                }))
+              }
+              className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2"
+              placeholder="1, 3, 7"
+            />
+            <span className="mt-1 block text-xs text-stone-500">
+              Comma-separated day counts (1, 3, 7, or 14) after a step becomes
+              active.
+            </span>
+          </label>
+
+          <label className="block text-sm">
+            <span className="font-medium text-stone-900">Escalate after days</span>
+            <input
+              type="number"
+              min={0}
+              value={policy.escalateAfterDays}
+              onChange={(event) =>
+                setPolicy((current) => ({
+                  ...current,
+                  escalateAfterDays: Math.max(
+                    0,
+                    Number.parseInt(event.target.value, 10) || 0,
+                  ),
+                }))
+              }
+              className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2"
+            />
+            <span className="mt-1 block text-xs text-stone-500">
+              Set to 0 to disable automatic escalation.
+            </span>
+          </label>
+
+          <label className="block text-sm md:col-span-2">
+            <span className="font-medium text-stone-900">Escalation contact email</span>
+            <input
+              type="email"
+              value={policy.escalationContactEmail}
+              onChange={(event) =>
+                setPolicy((current) => ({
+                  ...current,
+                  escalationContactEmail: event.target.value,
+                }))
+              }
+              className="mt-2 w-full rounded-md border border-stone-300 px-3 py-2"
+              placeholder="legal-escalations@company.com"
+            />
+          </label>
+        </div>
       </section>
 
       {message ? (

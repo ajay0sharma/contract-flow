@@ -32,6 +32,8 @@ export function resolveWorkflowSteps(
     (approver) => approver.department === department,
   );
 
+  const policy = getWorkflowPolicy(organizationId);
+
   return workflowConfig.steps
     .filter((step) => !step.minAmount || amount >= step.minAmount)
     .map((step, index) => ({
@@ -53,7 +55,17 @@ export function resolveWorkflowSteps(
           : step.id === "department-vp"
             ? departmentVpApprover?.assigneeName ?? step.assigneeName
             : step.assigneeName,
-      status: index === 0 ? "current" : "upcoming",
+      status: policy.allowParallelApprovals
+        ? ("current" as const)
+        : index === 0
+          ? ("current" as const)
+          : ("upcoming" as const),
+      assignedAt:
+        step.id === "legal"
+          ? undefined
+          : policy.allowParallelApprovals || index === 0
+            ? nowIsoTimestamp()
+            : undefined,
     }));
 }
 
@@ -76,7 +88,23 @@ export function formatStageLabel(stage: ContractStage): string {
 export function getCurrentApprover(
   contract: ContractRecord,
 ): WorkflowStep | null {
-  return contract.workflowSteps[contract.currentStepIndex] ?? null;
+  const activeSteps = getActiveApprovalSteps(contract);
+
+  if (activeSteps.length > 0) {
+    return activeSteps[0];
+  }
+
+  const indexedStep = contract.workflowSteps[contract.currentStepIndex];
+
+  if (indexedStep?.status === "current") {
+    return indexedStep;
+  }
+
+  return null;
+}
+
+export function getActiveApprovalSteps(contract: ContractRecord): WorkflowStep[] {
+  return contract.workflowSteps.filter((step) => step.status === "current");
 }
 
 export function isAwaitingApproval(contract: ContractRecord): boolean {
@@ -109,11 +137,262 @@ function createAuditEvent(
   };
 }
 
-function stageForStep(step: WorkflowStep | undefined): ContractStage {
-  const definition = getWorkflowConfig().steps.find(
+function stageForStep(
+  step: WorkflowStep | undefined,
+  organizationId = DEFAULT_ORGANIZATION_ID,
+): ContractStage {
+  const definition = getWorkflowConfig(organizationId).steps.find(
     (item) => item.id === step?.id,
   );
   return definition?.stage ?? "legal_review";
+}
+
+function resolveContractPolicy(contract: ContractRecord) {
+  return getWorkflowPolicy(contract.companyProfileId);
+}
+
+function stampCurrentStep(step: WorkflowStep): WorkflowStep {
+  if (step.id === "legal" && !step.assigneeEmail.trim()) {
+    return step;
+  }
+
+  return {
+    ...step,
+    assignedAt: step.assignedAt ?? nowIsoTimestamp(),
+  };
+}
+
+function findLegalStep(
+  workflowSteps: WorkflowStep[],
+): WorkflowStep | undefined {
+  return workflowSteps.find((step) => step.id === "legal");
+}
+
+function hasBlockingUnassignedLegal(contract: ContractRecord): boolean {
+  const legalStep = contract.workflowSteps.find(
+    (step) => step.id === "legal" && step.status === "current",
+  );
+
+  return Boolean(legalStep && !legalStep.assigneeEmail.trim());
+}
+
+function finalizeApprovedContract(
+  contract: ContractRecord,
+  workflowSteps: WorkflowStep[],
+  policy: ReturnType<typeof getWorkflowPolicy>,
+  auditTrail: AuditEvent[],
+): ContractRecord {
+  auditTrail.push(
+    createAuditEvent(
+      "Workflow Engine",
+      "system@contract-app.local",
+      "Approved for execution",
+      policy.autoActivateAfterFinalApproval
+        ? "All required approvals completed. Contract activated automatically."
+        : "All required approvals completed. Contract is ready for signature.",
+    ),
+  );
+
+  return {
+    ...contract,
+    workflowSteps,
+    currentStepIndex: workflowSteps.length,
+    stage: policy.autoActivateAfterFinalApproval ? "active" : "awaiting_signature",
+    auditTrail,
+    updatedAt: nowIsoTimestamp(),
+  };
+}
+
+function completeSequentialApproval(
+  contract: ContractRecord,
+  approverEmail: string,
+  approverName: string,
+  note: string | undefined,
+  policy: ReturnType<typeof getWorkflowPolicy>,
+): ContractRecord {
+  const currentStep = contract.workflowSteps[contract.currentStepIndex];
+
+  if (!currentStep || currentStep.status !== "current") {
+    throw new Error("No pending approval step.");
+  }
+
+  if (!currentStep.assigneeEmail.trim()) {
+    throw new Error(
+      "This contract has not been picked up yet. Assign a legal owner before approving.",
+    );
+  }
+
+  if (currentStep.assigneeEmail.toLowerCase() !== approverEmail.toLowerCase()) {
+    throw new Error("You are not assigned to the current approval step.");
+  }
+
+  const completedSteps = contract.workflowSteps.map((step, index) => {
+    if (index !== contract.currentStepIndex) {
+      return step;
+    }
+
+    return {
+      ...step,
+      status: "completed" as const,
+      completedAt: nowIsoDate(),
+      note,
+    };
+  });
+
+  const nextIndex = contract.currentStepIndex + 1;
+  const hasNextStep = nextIndex < completedSteps.length;
+  const nextSteps = completedSteps.map((step, index) => {
+    if (hasNextStep && index === nextIndex) {
+      return stampCurrentStep({ ...step, status: "current" as const });
+    }
+
+    return step;
+  });
+
+  const auditTrail = [
+    ...contract.auditTrail,
+    createAuditEvent(
+      approverName,
+      approverEmail,
+      "Approved",
+      `${currentStep.name} completed${note ? `: ${note}` : "."}`,
+    ),
+  ];
+
+  if (hasNextStep) {
+    const nextStep = nextSteps[nextIndex];
+
+    auditTrail.push(
+      createAuditEvent(
+        "Workflow Engine",
+        "system@contract-app.local",
+        "Routed",
+        `Contract sent to ${nextStep.name} (${nextStep.assigneeName}).`,
+      ),
+    );
+
+    return {
+      ...contract,
+      workflowSteps: nextSteps,
+      currentStepIndex: nextIndex,
+      stage: stageForStep(nextStep, contract.companyProfileId),
+      auditTrail,
+      updatedAt: nowIsoTimestamp(),
+    };
+  }
+
+  if (hasBlockingUnassignedLegal(contract)) {
+    throw new Error(
+      "Legal review must be assigned and completed before final approval.",
+    );
+  }
+
+  return finalizeApprovedContract(contract, nextSteps, policy, auditTrail);
+}
+
+function completeParallelApproval(
+  contract: ContractRecord,
+  approverEmail: string,
+  approverName: string,
+  note: string | undefined,
+  policy: ReturnType<typeof getWorkflowPolicy>,
+): ContractRecord {
+  const stepIndex = contract.workflowSteps.findIndex(
+    (step) =>
+      step.status === "current" &&
+      step.assigneeEmail.trim().toLowerCase() === approverEmail.toLowerCase(),
+  );
+
+  if (stepIndex === -1) {
+    throw new Error("You are not assigned to a current approval step.");
+  }
+
+  const currentStep = contract.workflowSteps[stepIndex];
+
+  if (!currentStep.assigneeEmail.trim()) {
+    throw new Error(
+      "This contract has not been picked up yet. Assign a legal owner before approving.",
+    );
+  }
+
+  let workflowSteps = contract.workflowSteps.map((step, index) => {
+    if (index !== stepIndex) {
+      return step;
+    }
+
+    return {
+      ...step,
+      status: "completed" as const,
+      completedAt: nowIsoDate(),
+      note,
+    };
+  });
+
+  const auditTrail = [
+    ...contract.auditTrail,
+    createAuditEvent(
+      approverName,
+      approverEmail,
+      "Approved",
+      `${currentStep.name} completed${note ? `: ${note}` : "."}`,
+    ),
+  ];
+
+  if (!policy.requireAllApprovers) {
+    workflowSteps = workflowSteps.map((step) => {
+      if (step.id === "legal" && step.status !== "completed") {
+        return step;
+      }
+
+      if (step.status === "current" || step.status === "upcoming") {
+        return { ...step, status: "skipped" as const };
+      }
+
+      return step;
+    });
+
+    const legalStep = findLegalStep(workflowSteps);
+
+    if (legalStep && legalStep.status !== "completed") {
+      return {
+        ...contract,
+        workflowSteps,
+        stage: stageForStep(legalStep, contract.companyProfileId),
+        auditTrail,
+        updatedAt: nowIsoTimestamp(),
+      };
+    }
+
+    if (hasBlockingUnassignedLegal({ ...contract, workflowSteps })) {
+      throw new Error(
+        "Legal review must be assigned and completed before final approval.",
+      );
+    }
+
+    return finalizeApprovedContract(contract, workflowSteps, policy, auditTrail);
+  }
+
+  const remainingCurrent = workflowSteps.filter(
+    (step) => step.status === "current",
+  );
+
+  if (remainingCurrent.length > 0) {
+    return {
+      ...contract,
+      workflowSteps,
+      stage: stageForStep(remainingCurrent[0], contract.companyProfileId),
+      auditTrail,
+      updatedAt: nowIsoTimestamp(),
+    };
+  }
+
+  if (hasBlockingUnassignedLegal(contract)) {
+    throw new Error(
+      "Legal review must be assigned and completed before final approval.",
+    );
+  }
+
+  return finalizeApprovedContract(contract, workflowSteps, policy, auditTrail);
 }
 
 function isAmountPopulated(amount: string | undefined | null): boolean {
@@ -206,7 +485,7 @@ export function createContractFromIntake(
     templateId: input.templateId ?? null,
     templateVersion: input.templateVersion ?? null,
     intakeFormId: input.intakeFormId ?? null,
-    stage: stageForStep(workflowSteps[0]),
+    stage: stageForStep(workflowSteps[0], input.companyProfileId),
     workflowSteps,
     currentStepIndex: 0,
     attachments,
@@ -233,100 +512,25 @@ export function approveContractStep(
   approverName: string,
   note?: string,
 ): ContractRecord {
-  const currentStep = getCurrentApprover(contract);
+  const policy = resolveContractPolicy(contract);
 
-  if (!currentStep) {
-    throw new Error("No pending approval step.");
-  }
-
-  if (!currentStep.assigneeEmail.trim()) {
-    throw new Error(
-      "This contract has not been picked up yet. Assign a legal owner before approving.",
-    );
-  }
-
-  if (
-    currentStep.assigneeEmail.toLowerCase() !== approverEmail.toLowerCase()
-  ) {
-    throw new Error("You are not assigned to the current approval step.");
-  }
-
-  const completedSteps = contract.workflowSteps.map((step, index) => {
-    if (index !== contract.currentStepIndex) {
-      return step;
-    }
-
-    return {
-      ...step,
-      status: "completed" as const,
-      completedAt: nowIsoDate(),
-      note,
-    };
-  });
-
-  const nextIndex = contract.currentStepIndex + 1;
-  const hasNextStep = nextIndex < completedSteps.length;
-  const nextSteps = completedSteps.map((step, index) => {
-    if (hasNextStep && index === nextIndex) {
-      return { ...step, status: "current" as const };
-    }
-
-    return step;
-  });
-
-  const auditTrail = [
-    ...contract.auditTrail,
-    createAuditEvent(
-      approverName,
+  if (policy.allowParallelApprovals) {
+    return completeParallelApproval(
+      contract,
       approverEmail,
-      "Approved",
-      `${currentStep.name} completed${note ? `: ${note}` : "."}`,
-    ),
-  ];
-
-  if (hasNextStep) {
-    const nextStep = nextSteps[nextIndex];
-
-    auditTrail.push(
-      createAuditEvent(
-        "Workflow Engine",
-        "system@contract-app.local",
-        "Routed",
-        `Contract sent to ${nextStep.name} (${nextStep.assigneeName}).`,
-      ),
+      approverName,
+      note,
+      policy,
     );
-
-    return {
-      ...contract,
-      workflowSteps: nextSteps,
-      currentStepIndex: nextIndex,
-      stage: stageForStep(nextStep),
-      auditTrail,
-      updatedAt: nowIsoTimestamp(),
-    };
   }
 
-  auditTrail.push(
-    createAuditEvent(
-      "Workflow Engine",
-      "system@contract-app.local",
-      "Approved for execution",
-      getWorkflowPolicy().autoActivateAfterFinalApproval
-        ? "All required approvals completed. Contract activated automatically."
-        : "All required approvals completed. Contract is ready for signature.",
-    ),
+  return completeSequentialApproval(
+    contract,
+    approverEmail,
+    approverName,
+    note,
+    policy,
   );
-
-  return {
-    ...contract,
-    workflowSteps: nextSteps,
-    currentStepIndex: nextIndex,
-    stage: getWorkflowPolicy().autoActivateAfterFinalApproval
-      ? "active"
-      : "awaiting_signature",
-    auditTrail,
-    updatedAt: nowIsoTimestamp(),
-  };
 }
 
 export function reassignCurrentApprovalStep(
@@ -334,8 +538,20 @@ export function reassignCurrentApprovalStep(
   newAssignee: { email: string; name: string },
   actor: { email: string; name: string },
   note?: string,
+  targetAssigneeEmail?: string,
 ): ContractRecord {
-  const currentStep = getCurrentApprover(contract);
+  const policy = resolveContractPolicy(contract);
+  const normalizedTarget = targetAssigneeEmail?.trim().toLowerCase();
+  const stepIndex = policy.allowParallelApprovals
+    ? contract.workflowSteps.findIndex(
+        (step) =>
+          step.status === "current" &&
+          (!normalizedTarget ||
+            step.assigneeEmail.trim().toLowerCase() === normalizedTarget),
+      )
+    : contract.currentStepIndex;
+  const currentStep =
+    stepIndex >= 0 ? contract.workflowSteps[stepIndex] : undefined;
 
   if (!currentStep) {
     throw new Error("No pending approval step.");
@@ -365,14 +581,17 @@ export function reassignCurrentApprovalStep(
   }
 
   const workflowSteps = contract.workflowSteps.map((step, index) => {
-    if (index !== contract.currentStepIndex) {
+    if (index !== stepIndex) {
       return step;
     }
 
     return {
-      ...step,
-      assigneeEmail: normalizedEmail,
-      assigneeName: normalizedName,
+      ...stampCurrentStep({
+        ...step,
+        assigneeEmail: normalizedEmail,
+        assigneeName: normalizedName,
+      }),
+      assignedAt: nowIsoTimestamp(),
     };
   });
 
@@ -427,9 +646,12 @@ export function assignLegalReviewerStep(
     workflowSteps: contract.workflowSteps.map((step) =>
       step.id === "legal"
         ? {
-            ...step,
-            assigneeEmail: normalizedEmail,
-            assigneeName: normalizedName,
+            ...stampCurrentStep({
+              ...step,
+              assigneeEmail: normalizedEmail,
+              assigneeName: normalizedName,
+            }),
+            assignedAt: nowIsoTimestamp(),
           }
         : step,
     ),
@@ -456,7 +678,17 @@ export function rejectContractStep(
   approverName: string,
   note?: string,
 ): ContractRecord {
-  const currentStep = getCurrentApprover(contract);
+  const policy = resolveContractPolicy(contract);
+  const stepIndex = policy.allowParallelApprovals
+    ? contract.workflowSteps.findIndex(
+        (step) =>
+          step.status === "current" &&
+          step.assigneeEmail.trim().toLowerCase() ===
+            approverEmail.toLowerCase(),
+      )
+    : contract.currentStepIndex;
+  const currentStep =
+    stepIndex >= 0 ? contract.workflowSteps[stepIndex] : undefined;
 
   if (!currentStep) {
     throw new Error("No pending approval step.");
@@ -475,7 +707,7 @@ export function rejectContractStep(
   }
 
   const workflowSteps = contract.workflowSteps.map((step, index) => {
-    if (index === contract.currentStepIndex) {
+    if (index === stepIndex) {
       return {
         ...step,
         status: "rejected" as const,
@@ -484,7 +716,11 @@ export function rejectContractStep(
       };
     }
 
-    if (index > contract.currentStepIndex && step.status === "upcoming") {
+    if (
+      policy.allowParallelApprovals
+        ? step.status === "current" || step.status === "upcoming"
+        : index > contract.currentStepIndex && step.status === "upcoming"
+    ) {
       return { ...step, status: "skipped" as const };
     }
 

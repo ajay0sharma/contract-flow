@@ -4,6 +4,7 @@ import {
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import type { WorkflowPolicy } from "@/lib/workflow-config-types";
 import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
+import { normalizeWorkflowPolicy } from "@/lib/workflow-policy-normalize";
 import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 
 export { getWorkflowPolicy } from "@/lib/workflow-policy-read";
@@ -12,7 +13,7 @@ export async function updateWorkflowPolicy(
   policy: WorkflowPolicy,
   organizationId = DEFAULT_ORGANIZATION_ID,
 ): Promise<WorkflowPolicy> {
-  const nextPolicy = { ...policy };
+  const nextPolicy = normalizeWorkflowPolicy(policy);
 
   if (allowMemoryPersistence()) {
     const globalStore = globalThis as typeof globalThis & {

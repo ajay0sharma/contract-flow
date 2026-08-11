@@ -3,18 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
 import { mapContractWorkflowActionError } from "@/lib/contract-approval-errors";
 import { resolveContractOrganizationId } from "@/lib/contract-email-org";
+import { sendContractRejectionNotification } from "@/lib/contract-notifications";
 import { rejectAndPersist } from "@/lib/contract-persistence";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { reportError } from "@/lib/error-reporting";
 import { getUserDisplayName } from "@/lib/user-display-name";
-
-function sendNotificationEmail(
-  to: string,
-  subject: string,
-  body: string,
-): void {
-  console.info(`email would be sent to ${to}`, { subject, body });
-}
 
 export async function POST(
   request: NextRequest,
@@ -82,18 +75,11 @@ export async function POST(
       console.error("Failed to record contract rejection audit log:", auditError);
     }
 
-    sendNotificationEmail(
-      record.requesterEmail,
-      `Contract rejected: ${record.title}`,
-      [
-        `Hello ${record.requesterName},`,
-        "",
-        `Your contract request ${record.recordNumber} (${record.title}) was rejected during approval.`,
-        note ? `Reason: ${note}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    );
+    try {
+      await sendContractRejectionNotification(record, note);
+    } catch (notificationError) {
+      console.error("Failed to send contract rejection notification:", notificationError);
+    }
 
     return NextResponse.json(record);
   } catch (error) {

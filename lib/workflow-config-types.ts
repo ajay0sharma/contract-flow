@@ -82,6 +82,10 @@ export interface WorkflowPolicy {
   notifyAssigneesByEmail: boolean;
   allowParallelApprovals: boolean;
   autoActivateAfterFinalApproval: boolean;
+  approvalReminderDays: number[];
+  escalateAfterDays: number;
+  escalationContactEmail: string;
+  notifyEscalationContact: boolean;
 }
 
 export const defaultWorkflowPolicy: WorkflowPolicy = {
@@ -89,4 +93,8 @@ export const defaultWorkflowPolicy: WorkflowPolicy = {
   notifyAssigneesByEmail: true,
   allowParallelApprovals: false,
   autoActivateAfterFinalApproval: false,
+  approvalReminderDays: [1, 3, 7],
+  escalateAfterDays: 5,
+  escalationContactEmail: "",
+  notifyEscalationContact: true,
 };

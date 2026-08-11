@@ -22,6 +22,13 @@ import {
   resolveRenewalSettings,
   shouldAutoExpireContract,
 } from "@/lib/renewal-workflow";
+import { normalizeWorkflowPolicy } from "@/lib/workflow-policy-normalize";
+import { reminderTypeForDay } from "@/lib/approval-escalation-service";
+import {
+  getCachedWorkflowPolicy,
+  setCachedWorkflowPolicy,
+} from "@/lib/platform-data-cache";
+import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
 import { isDatabaseConfigured } from "@/lib/prisma";
 import {
   approveAndPersist,
@@ -783,11 +790,138 @@ function runRenewalWorkflowUnitTests(): void {
   );
 }
 
+function runWorkflowPolicyUnitTests(): void {
+  const normalized = normalizeWorkflowPolicy({
+    notifyAssigneesByEmail: false,
+    approvalReminderDays: [7, 3, 3],
+    escalateAfterDays: -2,
+  });
+
+  assert(
+    "Workflow policy normalization dedupes reminder days",
+    normalized.approvalReminderDays.join(",") === "3,7",
+    normalized.approvalReminderDays.join(","),
+  );
+
+  assert(
+    "Workflow policy normalization clamps escalation days",
+    normalized.escalateAfterDays === 0,
+    String(normalized.escalateAfterDays),
+  );
+
+  const filteredDays = normalizeWorkflowPolicy({
+    approvalReminderDays: [2, 5, 3],
+  });
+
+  assert(
+    "Workflow policy normalization keeps supported reminder days only",
+    filteredDays.approvalReminderDays.join(",") === "3",
+    filteredDays.approvalReminderDays.join(","),
+  );
+
+  const emptyDays = normalizeWorkflowPolicy({
+    approvalReminderDays: [],
+  });
+
+  assert(
+    "Workflow policy normalization restores default reminder days",
+    emptyDays.approvalReminderDays.join(",") === "1,3,7",
+    emptyDays.approvalReminderDays.join(","),
+  );
+
+  assert(
+    "Reminder type maps day 14 correctly",
+    reminderTypeForDay(14) === "reminder_14",
+    reminderTypeForDay(14),
+  );
+
+  const parallelDraft = createContractFromIntake(
+    {
+      ...buildTestIntake("parallel"),
+      contractAmount: "75000",
+    },
+    {
+      id: "parallel-test-id",
+      recordNumber: "CR-PARALLEL-001",
+    },
+  );
+
+  const originalPolicy =
+    getCachedWorkflowPolicy(ORG_ID) ?? getWorkflowPolicy(ORG_ID);
+  const parallelPolicy = {
+    ...originalPolicy,
+    allowParallelApprovals: true,
+    requireAllApprovers: false,
+  };
+
+  setCachedWorkflowPolicy(ORG_ID, parallelPolicy);
+
+  const parallelResolved = resolveWorkflowSteps(
+    75000,
+    parallelDraft.department,
+    parallelDraft.contractType,
+    ORG_ID,
+  );
+
+  assert(
+    "Parallel policy activates all workflow steps",
+    parallelResolved.every((step) => step.status === "current"),
+    parallelResolved.map((step) => step.status).join(","),
+  );
+
+  const parallelContract = {
+    ...parallelDraft,
+    workflowSteps: parallelResolved.map((step) =>
+      step.id === "legal"
+        ? {
+            ...step,
+            assigneeEmail: LEGAL_USER.email,
+            assigneeName: LEGAL_USER.name,
+          }
+        : step,
+    ),
+  };
+
+  const parallelApproved = approveContractStep(
+    parallelContract,
+    LEGAL_USER.email,
+    LEGAL_USER.name,
+    "Parallel OR approval",
+  );
+
+  assert(
+    "Parallel OR policy finalizes after first approval",
+    ["awaiting_signature", "active"].includes(parallelApproved.stage),
+    parallelApproved.stage,
+  );
+
+  const parallelOrPartial = approveContractStep(
+    {
+      ...parallelDraft,
+      workflowSteps: parallelResolved,
+    },
+    parallelResolved.find((step) => step.id === "department-vp")!.assigneeEmail,
+    parallelResolved.find((step) => step.id === "department-vp")!.assigneeName,
+    "Parallel OR partial approval",
+  );
+
+  assert(
+    "Parallel OR keeps legal pending when non-legal approves first",
+    parallelOrPartial.stage === "legal_review" &&
+      parallelOrPartial.workflowSteps.find((step) => step.id === "legal")
+        ?.status === "current",
+    parallelOrPartial.stage,
+  );
+
+  setCachedWorkflowPolicy(ORG_ID, originalPolicy);
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
   runWorkflowUnitTests();
   runRenewalWorkflowUnitTests();
+  runWorkflowPolicyUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();

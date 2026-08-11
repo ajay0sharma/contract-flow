@@ -3,8 +3,9 @@ import {
   dispatchContractEmailPayload,
   type ContractEmailDispatchPayload,
 } from "@/lib/contract-email-service";
-import { getCurrentApprover } from "@/lib/workflow-engine";
+import { getCurrentApprover, getActiveApprovalSteps } from "@/lib/workflow-engine";
 import { getWorkflowPolicy } from "@/lib/workflow-policy-read";
+import { resolveOrganizationPolicyId } from "@/lib/workflow-policy-normalize";
 import type { ContractRecord } from "@/types/contract";
 
 function buildContractUrl(contractId: string): string {
@@ -39,17 +40,74 @@ async function dispatchContractEmail(payload: {
   await dispatchContractEmailPayload(message);
 }
 
-export async function sendContractApprovalNotification(
+function resolvePolicy(contract: ContractRecord) {
+  return getWorkflowPolicy(resolveOrganizationPolicyId(contract.companyProfileId));
+}
+
+export async function sendContractIntakeNotification(
   contract: ContractRecord,
 ): Promise<void> {
-  if (!getWorkflowPolicy().notifyAssigneesByEmail) {
+  if (!resolvePolicy(contract).notifyAssigneesByEmail) {
     return;
   }
 
-  const nextApprover = getCurrentApprover(contract);
+  const contractUrl = buildContractUrl(contract.id);
+  const recipients = getActiveApprovalSteps(contract).filter(
+    (step) => step.assigneeEmail.trim(),
+  );
+
+  for (const step of recipients) {
+    await dispatchContractEmail({
+      contract,
+      to: step.assigneeEmail,
+      subject: `Contract approval needed: ${contract.title}`,
+      body: [
+        `Hello ${step.assigneeName},`,
+        "",
+        `Contract ${contract.recordNumber} (${contract.title}) has been submitted and is ready for ${step.name}.`,
+        contractUrl,
+      ].join("\n"),
+    });
+  }
+}
+
+export async function sendContractApprovalNotification(
+  contract: ContractRecord,
+): Promise<void> {
+  if (!resolvePolicy(contract).notifyAssigneesByEmail) {
+    return;
+  }
+
+  const policy = resolvePolicy(contract);
   const contractUrl = buildContractUrl(contract.id);
 
-  if (nextApprover) {
+  if (policy.allowParallelApprovals) {
+    const activeSteps = getActiveApprovalSteps(contract).filter((step) =>
+      step.assigneeEmail.trim(),
+    );
+
+    for (const step of activeSteps) {
+      await dispatchContractEmail({
+        contract,
+        to: step.assigneeEmail,
+        subject: `Contract approval needed: ${contract.title}`,
+        body: [
+          `Hello ${step.assigneeName},`,
+          "",
+          `Contract ${contract.recordNumber} (${contract.title}) is ready for ${step.name}.`,
+          contractUrl,
+        ].join("\n"),
+      });
+    }
+
+    if (activeSteps.length > 0) {
+      return;
+    }
+  }
+
+  const nextApprover = getCurrentApprover(contract);
+
+  if (nextApprover?.assigneeEmail.trim()) {
     await dispatchContractEmail({
       contract,
       to: nextApprover.assigneeEmail,
@@ -81,8 +139,9 @@ export async function sendContractApprovalNotification(
 
 export async function sendContractRejectionNotification(
   contract: ContractRecord,
+  note?: string,
 ): Promise<void> {
-  if (!getWorkflowPolicy().notifyAssigneesByEmail) {
+  if (!resolvePolicy(contract).notifyAssigneesByEmail) {
     return;
   }
 
@@ -96,8 +155,11 @@ export async function sendContractRejectionNotification(
       `Hello ${contract.requesterName},`,
       "",
       `Your contract request ${contract.recordNumber} (${contract.title}) was rejected during approval.`,
+      note ? `Reason: ${note}` : "",
       contractUrl,
-    ].join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n"),
   });
 }
 
@@ -105,7 +167,7 @@ export async function sendContractReassignmentNotification(
   contract: ContractRecord,
   previousAssigneeEmail: string,
 ): Promise<void> {
-  if (!getWorkflowPolicy().notifyAssigneesByEmail) {
+  if (!resolvePolicy(contract).notifyAssigneesByEmail) {
     return;
   }
 
@@ -176,5 +238,59 @@ export async function sendRenewalReminderNotification(input: {
     ]
       .filter(Boolean)
       .join("\n"),
+  });
+}
+
+export async function sendApprovalReminderNotification(input: {
+  contract: ContractRecord;
+  to: string;
+  recipientName: string;
+  stepName: string;
+  daysWaiting: number;
+}): Promise<void> {
+  if (!resolvePolicy(input.contract).notifyAssigneesByEmail) {
+    return;
+  }
+
+  const contractUrl = buildContractUrl(input.contract.id);
+
+  await dispatchContractEmail({
+    contract: input.contract,
+    to: input.to,
+    subject: `Approval reminder: ${input.contract.title}`,
+    body: [
+      `Hello ${input.recipientName},`,
+      "",
+      `Contract ${input.contract.recordNumber} (${input.contract.title}) has been waiting ${input.daysWaiting} day(s) for ${input.stepName}.`,
+      contractUrl,
+    ].join("\n"),
+  });
+}
+
+export async function sendApprovalEscalationNotification(input: {
+  contract: ContractRecord;
+  to: string;
+  recipientName: string;
+  stepName: string;
+  assigneeName: string;
+  daysWaiting: number;
+}): Promise<void> {
+  if (!resolvePolicy(input.contract).notifyAssigneesByEmail) {
+    return;
+  }
+
+  const contractUrl = buildContractUrl(input.contract.id);
+
+  await dispatchContractEmail({
+    contract: input.contract,
+    to: input.to,
+    subject: `Approval escalation: ${input.contract.title}`,
+    body: [
+      `Hello ${input.recipientName},`,
+      "",
+      `Contract ${input.contract.recordNumber} (${input.contract.title}) has exceeded the approval SLA.`,
+      `${input.stepName} has been waiting ${input.daysWaiting} day(s) with ${input.assigneeName}.`,
+      contractUrl,
+    ].join("\n"),
   });
 }
