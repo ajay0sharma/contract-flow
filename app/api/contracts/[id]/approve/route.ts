@@ -1,11 +1,12 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { mapContractWorkflowActionError } from "@/lib/contract-approval-errors";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import {
   approveAndPersist,
-  loadContractRecord,
 } from "@/lib/contract-persistence";
+import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { reportError } from "@/lib/error-reporting";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import { getCurrentApprover } from "@/lib/workflow-engine";
@@ -38,8 +39,13 @@ export async function POST(
 
   try {
     const { id } = await context.params;
-    const organizationId = resolveClauseLibraryOrganizationId();
-    const existing = await loadContractRecord(id, organizationId);
+    const organizationId = await resolveContractOrganizationId(id);
+
+    if (!organizationId) {
+      return NextResponse.json({ error: "Contract not found." }, { status: 404 });
+    }
+
+    const existing = await loadMergedContractRecord(id, organizationId);
 
     if (!existing) {
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });
@@ -63,19 +69,23 @@ export async function POST(
       note,
     );
 
-    await writeAuditLog({
-      organizationId,
-      entityType: "contract",
-      entityId: record.id,
-      action: "contract_step_approved",
-      actorEmail: approverEmail,
-      actorName: approverName,
-      detail: `Approved contract ${record.recordNumber}.`,
-      metadata: {
-        note: note ?? null,
-        stage: record.stage,
-      },
-    });
+    try {
+      await writeAuditLog({
+        organizationId,
+        entityType: "contract",
+        entityId: record.id,
+        action: "contract_step_approved",
+        actorEmail: approverEmail,
+        actorName: approverName,
+        detail: `Approved contract ${record.recordNumber}.`,
+        metadata: {
+          note: note ?? null,
+          stage: record.stage,
+        },
+      });
+    } catch (auditError) {
+      console.error("Failed to record contract approval audit log:", auditError);
+    }
 
     if (record.currentStepIndex > previousStepIndex) {
       const nextApprover = getCurrentApprover(record);
@@ -107,13 +117,10 @@ export async function POST(
 
     return NextResponse.json(record);
   } catch (error) {
-    if (error instanceof Error) {
-      if (
-        error.message.includes("not assigned") ||
-        error.message.includes("No pending approval step")
-      ) {
-        return NextResponse.json({ error: error.message }, { status: 403 });
-      }
+    const mapped = mapContractWorkflowActionError(error);
+
+    if (mapped) {
+      return mapped;
     }
 
     reportError(error, { route: "POST /api/contracts/[id]/approve" });

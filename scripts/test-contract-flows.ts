@@ -8,6 +8,7 @@ import {
 import {
   isAwaitingLegalPickup,
   isLegalReviewUnassigned,
+  prepareContractForWorkflowAction,
 } from "@/lib/legal-assignment";
 import { isDatabaseConfigured } from "@/lib/prisma";
 import {
@@ -156,6 +157,36 @@ function runWorkflowUnitTests(): void {
       }
     })(),
     "approve throws until pickup",
+  );
+
+  const autoPickupDraft = createContractFromIntake(buildTestIntake("auto-pickup"), {
+    id: "test-auto-pickup-id",
+    recordNumber: "CR-TEST-AUTO",
+  });
+  const preparedForApprove = prepareContractForWorkflowAction(
+    autoPickupDraft,
+    LEGAL_USER,
+    "approve",
+  );
+
+  const autoApproved = approveContractStep(
+    preparedForApprove,
+    LEGAL_USER.email,
+    LEGAL_USER.name,
+    "Automated auto-pickup approval",
+  );
+
+  assert(
+    "Auto pickup on approve assigns legal owner",
+    autoApproved.workflowSteps.find((step) => step.id === "legal")
+      ?.assigneeEmail === LEGAL_USER.email,
+    LEGAL_USER.email,
+  );
+
+  assert(
+    "Auto pickup on approve advances workflow",
+    autoApproved.stage !== "legal_review",
+    `stage=${autoApproved.stage}`,
   );
 
   const approved = approveContractStep(
@@ -379,7 +410,7 @@ async function runDatabaseIntegrationTests(): Promise<void> {
     return;
   }
 
-  let createdId: string | null = null;
+  const createdIds: string[] = [];
 
   try {
     const suffix = Date.now().toString();
@@ -387,7 +418,7 @@ async function runDatabaseIntegrationTests(): Promise<void> {
       buildTestIntake(suffix),
       ORG_ID,
     );
-    createdId = record.id;
+    createdIds.push(record.id);
 
     assert(
       "Persisted submission saved to database",
@@ -412,8 +443,35 @@ async function runDatabaseIntegrationTests(): Promise<void> {
       `pending count=${pending.length}`,
     );
 
-    const pickedUp = await assignLegalReviewerAndPersist(
+    const autoApproved = await approveAndPersist(
       record.id,
+      ORG_ID,
+      LEGAL_USER.email,
+      LEGAL_USER.name,
+      "Automated DB auto-pickup approval",
+    );
+
+    assert(
+      "Auto pickup on approve persists legal owner",
+      autoApproved.workflowSteps.find((step) => step.id === "legal")
+        ?.assigneeEmail === LEGAL_USER.email,
+      LEGAL_USER.email,
+    );
+
+    assert(
+      "Auto pickup on approve persists stage change",
+      autoApproved.stage !== "legal_review",
+      `stage=${autoApproved.stage}`,
+    );
+
+    const pickupRecord = await createAndPersistContract(
+      buildTestIntake(`${suffix}-pickup`),
+      ORG_ID,
+    );
+    createdIds.push(pickupRecord.id);
+
+    const pickedUp = await assignLegalReviewerAndPersist(
+      pickupRecord.id,
       ORG_ID,
       LEGAL_USER,
       LEGAL_USER,
@@ -427,7 +485,7 @@ async function runDatabaseIntegrationTests(): Promise<void> {
     );
 
     const approved = await approveAndPersist(
-      record.id,
+      pickupRecord.id,
       ORG_ID,
       LEGAL_USER.email,
       LEGAL_USER.name,
@@ -449,8 +507,10 @@ async function runDatabaseIntegrationTests(): Promise<void> {
     });
 
     assert(
-      "Approved contract removed from pending review queue",
-      !pendingAfterApproval.some((contract) => contract.id === approved.id),
+      "Approved contracts removed from pending review queue",
+      !pendingAfterApproval.some((contract) =>
+        createdIds.includes(contract.id),
+      ),
       `pending count=${pendingAfterApproval.length}`,
     );
 
@@ -467,12 +527,16 @@ async function runDatabaseIntegrationTests(): Promise<void> {
       error instanceof Error ? error.message : "Unknown database error",
     );
   } finally {
-    if (createdId) {
+    if (createdIds.length > 0) {
       try {
         const { getPrismaClient } = await import("@/lib/prisma");
         const prisma = getPrismaClient();
-        await prisma.contract.delete({ where: { id: createdId } });
-        pass("Cleanup", `Deleted test contract ${createdId}`);
+
+        for (const id of createdIds) {
+          await prisma.contract.delete({ where: { id } });
+        }
+
+        pass("Cleanup", `Deleted ${createdIds.length} test contract(s)`);
       } catch (error) {
         fail(
           "Cleanup",

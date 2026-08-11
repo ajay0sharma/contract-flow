@@ -15,6 +15,7 @@ import {
   isLegalEmail,
   isSupportEmail,
 } from "@/lib/access-control";
+import { prepareContractForWorkflowAction } from "@/lib/legal-assignment";
 import {
   allocateContractRecordIdentity,
   normalizeContractRecordLookup,
@@ -1053,8 +1054,13 @@ export function approveContract(
     throw new Error("Contract not found.");
   }
 
-  const updated = approveContractStep(
+  const prepared = prepareContractForWorkflowAction(
     store[index],
+    { email: approverEmail, name: approverName },
+    "approve",
+  );
+  const updated = approveContractStep(
+    prepared,
     approverEmail,
     approverName,
     note,
@@ -1076,8 +1082,13 @@ export function rejectContract(
     throw new Error("Contract not found.");
   }
 
-  const updated = rejectContractStep(
+  const prepared = prepareContractForWorkflowAction(
     store[index],
+    { email: approverEmail, name: approverName },
+    "reject",
+  );
+  const updated = rejectContractStep(
+    prepared,
     approverEmail,
     approverName,
     note,

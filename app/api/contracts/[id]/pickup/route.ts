@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireLegalOrAdminApiActor } from "@/lib/api-privileged-auth";
 import { getLegalAssignableUsers } from "@/lib/access-control";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { assignLegalReviewerAndPersist } from "@/lib/contract-persistence";
 import { reportError } from "@/lib/error-reporting";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
@@ -21,7 +21,12 @@ export async function POST(
 
   try {
     const { id } = await context.params;
-    const organizationId = resolveClauseLibraryOrganizationId();
+    const organizationId = await resolveContractOrganizationId(id);
+
+    if (!organizationId) {
+      return NextResponse.json({ error: "Contract not found." }, { status: 404 });
+    }
+
     const existing = await loadMergedContractRecord(id, organizationId);
 
     if (!existing) {

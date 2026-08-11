@@ -16,6 +16,7 @@ import {
 } from "@/lib/contract-email-dedup";
 import { sendContractRecordEmail } from "@/lib/contract-email-service";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { prepareContractForWorkflowAction } from "@/lib/legal-assignment";
 import { appendRelatedEmailToRecord, addContractEmail, normalizeContractRecord } from "@/lib/contract-store";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getPrismaClient } from "@/lib/prisma";
@@ -23,12 +24,12 @@ import { safeTrim } from "@/lib/string-utils";
 import { captureException } from "@/lib/error-reporting";
 import {
   activateContract,
+  assignLegalReviewerStep,
   approveContractStep,
   createContractFromIntake,
   parseContractAmount,
   reassignCurrentApprovalStep,
   rejectContractStep,
-  assignLegalReviewerStep,
 } from "@/lib/workflow-engine";
 import type {
   AuditEvent,
@@ -502,13 +503,24 @@ export async function approveAndPersist(
   approverName: string,
   note?: string,
 ): Promise<ContractRecord> {
-  const contract = await loadContractRecord(contractId, organizationId);
+  const contract = await loadMergedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
   }
 
-  const updated = approveContractStep(contract, approverEmail, approverName, note);
+  const prepared = prepareContractForWorkflowAction(
+    contract,
+    { email: approverEmail, name: approverName },
+    "approve",
+  );
+
+  const updated = approveContractStep(
+    prepared,
+    approverEmail,
+    approverName,
+    note,
+  );
   await saveContractRecord(updated);
   return updated;
 }
@@ -520,13 +532,24 @@ export async function rejectAndPersist(
   approverName: string,
   note?: string,
 ): Promise<ContractRecord> {
-  const contract = await loadContractRecord(contractId, organizationId);
+  const contract = await loadMergedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
   }
 
-  const updated = rejectContractStep(contract, approverEmail, approverName, note);
+  const prepared = prepareContractForWorkflowAction(
+    contract,
+    { email: approverEmail, name: approverName },
+    "reject",
+  );
+
+  const updated = rejectContractStep(
+    prepared,
+    approverEmail,
+    approverName,
+    note,
+  );
   await saveContractRecord(updated);
   return updated;
 }

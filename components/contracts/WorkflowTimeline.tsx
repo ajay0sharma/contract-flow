@@ -5,6 +5,7 @@ import { ActivateContractButton } from "@/components/contracts/ActivateContractB
 import { ApprovalReassignDialog } from "@/components/contracts/ApprovalReassignDialog";
 import { formatAuditTimestamp, formatContractDateTime } from "@/lib/format-dates";
 import { useDeferredEffect } from "@/lib/use-deferred-effect";
+import { isAwaitingLegalPickup } from "@/lib/legal-assignment";
 import { getCurrentApprover, isAwaitingApproval } from "@/lib/workflow-engine";
 import type { ContractRecord, WorkflowStep } from "@/types/contract";
 import type { SignatureEnvelopeView } from "@/types/signature-integration";
@@ -218,11 +219,13 @@ export function WorkflowTimeline({
   const rejectedStep = contract.workflowSteps.find(
     (step) => step.status === "rejected",
   );
+  const normalizedUserEmail = userEmail.trim().toLowerCase();
+  const isCurrentAssignee =
+    currentStep?.assigneeEmail.trim().toLowerCase() === normalizedUserEmail;
+  const canPickupAndAct =
+    isPrivilegedUser && isAwaitingLegalPickup(contract);
   const canActOnCurrentStep =
-    currentStep &&
-    (isPrivilegedUser ||
-      currentStep.assigneeEmail.trim().toLowerCase() ===
-        userEmail.trim().toLowerCase());
+    currentStep && (isCurrentAssignee || canPickupAndAct);
   const canReassign =
     isPrivilegedUser &&
     isAwaitingApproval(contract) &&
@@ -308,7 +311,7 @@ export function WorkflowTimeline({
                           onClick={onApprove}
                           className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                         >
-                          Approve
+                          {canPickupAndAct ? "Pick up and approve" : "Approve"}
                         </button>
                         <button
                           type="button"
@@ -316,7 +319,7 @@ export function WorkflowTimeline({
                           onClick={onReject}
                           className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-60"
                         >
-                          Reject
+                          {canPickupAndAct ? "Pick up and reject" : "Reject"}
                         </button>
                       </div>
                     ) : null}
