@@ -22,6 +22,10 @@ import {
   resolveRenewalSettings,
   shouldAutoExpireContract,
 } from "@/lib/renewal-workflow";
+import {
+  matchesContractSearchTerms,
+  parseContractSearchTerms,
+} from "@/lib/contract-search-service";
 import { normalizeWorkflowPolicy } from "@/lib/workflow-policy-normalize";
 import { reminderTypeForDay } from "@/lib/approval-escalation-service";
 import {
@@ -916,12 +920,67 @@ function runWorkflowPolicyUnitTests(): void {
   setCachedWorkflowPolicy(ORG_ID, originalPolicy);
 }
 
+
+function runContractSearchUnitTests(): void {
+  const terms = parseContractSearchTerms("  Acme   PO-123 ");
+  assert(
+    "Contract search parses multi-term query",
+    terms.join(",") === "acme,po-123",
+    terms.join(","),
+  );
+
+  const sample = createContractFromIntake(buildTestIntake("search"), {
+    id: "search-test-id",
+    recordNumber: "CR-SEARCH-001",
+  });
+
+  assert(
+    "Contract search matches record number terms",
+    matchesContractSearchTerms(sample, ["cr-search"]),
+    sample.recordNumber,
+  );
+
+  assert(
+    "Contract search requires all terms",
+    !matchesContractSearchTerms(sample, ["cr-search", "missing-term"]),
+    sample.title,
+  );
+
+  assert(
+    "Contract search matches counterparty terms",
+    matchesContractSearchTerms(sample, ["test", "vendor"]),
+    sample.companyName,
+  );
+
+  assert(
+    "Contract search matches workflow assignee text",
+    matchesContractSearchTerms(
+      {
+        ...sample,
+        workflowSteps: [
+          {
+            id: "legal",
+            name: "Legal Review",
+            role: "Legal",
+            assigneeEmail: "legal@example.com",
+            assigneeName: "Legal Reviewer",
+            status: "current",
+          },
+        ],
+      },
+      ["legal@example.com"],
+    ),
+    "workflow assignee",
+  );
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
   runWorkflowUnitTests();
   runRenewalWorkflowUnitTests();
   runWorkflowPolicyUnitTests();
+  runContractSearchUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();

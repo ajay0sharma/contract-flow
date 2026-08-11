@@ -1,4 +1,8 @@
 import { getAllowedOrganizationIds } from "@/lib/clause-library-org";
+import {
+  matchesContractSearchTerms,
+  parseContractSearchTerms,
+} from "@/lib/contract-search-service";
 import { canViewContractRecord } from "@/lib/contract-store";
 import {
   deriveContractStatus,
@@ -54,20 +58,7 @@ export function withDerivedContractStatus(
 }
 
 function matchesSearch(contract: ContractRecord, search: string): boolean {
-  const needle = search.trim().toLowerCase();
-
-  if (!needle) {
-    return true;
-  }
-
-  return [
-    contract.title,
-    contract.companyName,
-    contract.recordNumber,
-    contract.mainContactName,
-    contract.mainContactEmail,
-    contract.requesterName,
-  ].some((value) => value.toLowerCase().includes(needle));
+  return matchesContractSearchTerms(contract, parseContractSearchTerms(search));
 }
 
 export function filterContractRecords(

@@ -2,9 +2,6 @@ import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { PageShell } from "@/components/PageShell";
 import { ContractSearchClient } from "@/components/search/ContractSearchClient";
-import { listAllVisibleContractRecords } from "@/lib/contract-list-service";
-import { getContractsVisibleTo } from "@/lib/contract-store";
-import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getUserRole } from "@/lib/legal-access";
 
 export default async function SearchPage() {
@@ -16,9 +13,6 @@ export default async function SearchPage() {
 
   const email = user.primaryEmailAddress?.emailAddress ?? "";
   const role = getUserRole(email);
-  const contracts = allowMemoryPersistence()
-    ? getContractsVisibleTo(email)
-    : await listAllVisibleContractRecords(email);
   const scopeLabel =
     role === "business"
       ? "General users can search all non-confidential records plus confidential records they requested."
@@ -28,7 +22,7 @@ export default async function SearchPage() {
 
   return (
     <PageShell title="Search">
-      <ContractSearchClient contracts={contracts} scopeLabel={scopeLabel} />
+      <ContractSearchClient scopeLabel={scopeLabel} />
     </PageShell>
   );
 }
