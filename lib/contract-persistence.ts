@@ -17,6 +17,7 @@ import {
 import { sendContractRecordEmail } from "@/lib/contract-email-service";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { prepareContractForWorkflowAction } from "@/lib/legal-assignment";
+import { applyRenewalSettingsToRecord } from "@/lib/renewal-workflow";
 import { appendRelatedEmailToRecord, addContractEmail, normalizeContractRecord } from "@/lib/contract-store";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getPrismaClient } from "@/lib/prisma";
@@ -45,6 +46,7 @@ import type {
   ContractEmailDirection,
   SendContractEmailInput,
   WorkflowStep,
+  RenewalStatus,
 } from "@/types/contract";
 
 type ContractRow = Prisma.ContractGetPayload<Record<string, never>>;
@@ -102,6 +104,20 @@ function toAmountNumeric(value: Prisma.Decimal | null | undefined): number {
 
 function toIsoString(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
+}
+
+function parseOptionalDate(value: string | null | undefined): Date | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
 }
 
 export function deriveContractStatus(
@@ -240,6 +256,11 @@ export function mapPrismaContractToRecord(record: ContractRow): ContractRecord {
     effectiveDate: toIsoString(record.effectiveDate),
     activatedAt: toIsoString(record.activatedAt),
     expiredAt: toIsoString(record.expiredAt),
+    autoRenewal: record.autoRenewal,
+    renewalNoticeDays: record.renewalNoticeDays,
+    renewalStatus: record.renewalStatus as RenewalStatus,
+    renewedFromContractId: record.renewedFromContractId,
+    renewalStartedAt: toIsoString(record.renewalStartedAt),
     contractVariables: parseContractVariables(record.contractVariables),
     generatedDraftPath: record.generatedDraftPath,
     missingVariables: parseMissingVariables(record.missingVariables),
@@ -304,6 +325,13 @@ function mapRecordToPrismaData(
     auditTrail: toJsonValue(record.auditTrail),
     attachments: toJsonValue(record.attachments),
     relatedEmails: toJsonValue(record.relatedEmails),
+    expiryDate: parseOptionalDate(record.expiryDate),
+    effectiveDate: parseOptionalDate(record.effectiveDate),
+    autoRenewal: record.autoRenewal ?? false,
+    renewalNoticeDays: record.renewalNoticeDays ?? 30,
+    renewalStatus: record.renewalStatus ?? "not_due",
+    renewedFromContractId: record.renewedFromContractId ?? null,
+    renewalStartedAt: parseOptionalDate(record.renewalStartedAt),
     createdAt: new Date(record.createdAt),
     updatedAt: new Date(record.updatedAt),
   };
@@ -372,6 +400,13 @@ export async function saveContractRecord(
       contractStatus: data.contractStatus,
       ...(data.activatedAt ? { activatedAt: data.activatedAt } : {}),
       ...(data.expiredAt ? { expiredAt: data.expiredAt } : {}),
+      expiryDate: data.expiryDate,
+      effectiveDate: data.effectiveDate,
+      autoRenewal: data.autoRenewal,
+      renewalNoticeDays: data.renewalNoticeDays,
+      renewalStatus: data.renewalStatus,
+      renewedFromContractId: data.renewedFromContractId,
+      renewalStartedAt: data.renewalStartedAt,
       currentStepIndex: data.currentStepIndex,
       workflowSteps: data.workflowSteps,
       auditTrail: data.auditTrail,
@@ -433,10 +468,10 @@ export async function createAndPersistContract(
 ): Promise<ContractRecord> {
   const id = randomUUID();
   const recordNumber = await generateUniqueRecordNumber();
-  let record = {
+  let record = applyRenewalSettingsToRecord({
     ...createContractFromIntake(input, { id, recordNumber }),
     companyProfileId: organizationId,
-  };
+  });
 
   if (record.templateId) {
     const template = await getContractTemplateById(

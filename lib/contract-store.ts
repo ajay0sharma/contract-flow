@@ -137,6 +137,11 @@ export function normalizeContractRecord(
     mainContactTitle: contract.mainContactTitle ?? "",
     mainContactEmail: contract.mainContactEmail ?? "",
     mainContactPhone: contract.mainContactPhone ?? "",
+    autoRenewal: contract.autoRenewal ?? false,
+    renewalNoticeDays: contract.renewalNoticeDays ?? 30,
+    renewalStatus: contract.renewalStatus ?? "not_due",
+    renewedFromContractId: contract.renewedFromContractId ?? null,
+    renewalStartedAt: contract.renewalStartedAt ?? null,
   };
 }
 

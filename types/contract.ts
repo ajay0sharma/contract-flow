@@ -16,6 +16,22 @@ export type ContractLifecycleStatus =
   | "expired"
   | "rejected";
 
+export type RenewalStatus =
+  | "not_due"
+  | "notice_window"
+  | "renewal_in_progress"
+  | "renewed"
+  | "non_renewing";
+
+export type RenewalReminderType =
+  | "notice_90"
+  | "notice_60"
+  | "notice_30"
+  | "notice_14"
+  | "notice_7"
+  | "expiration_day"
+  | "action_deadline";
+
 export type WorkflowStepStatus =
   | "completed"
   | "current"
@@ -231,6 +247,11 @@ export interface ContractRecord {
   effectiveDate?: string | null;
   activatedAt?: string | null;
   expiredAt?: string | null;
+  autoRenewal?: boolean;
+  renewalNoticeDays?: number;
+  renewalStatus?: RenewalStatus;
+  renewedFromContractId?: string | null;
+  renewalStartedAt?: string | null;
   contractVariables?: Record<string, string> | null;
   generatedDraftPath?: string | null;
   missingVariables?: string[] | null;

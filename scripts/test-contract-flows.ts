@@ -10,6 +10,18 @@ import {
   isLegalReviewUnassigned,
   prepareContractForWorkflowAction,
 } from "@/lib/legal-assignment";
+import {
+  buildRenewalIntakeInput,
+  buildRenewalQueueEntry,
+  computeDaysUntilDate,
+  computeRenewalActionDeadline,
+  deriveComputedRenewalStatus,
+  listRenewalQueue,
+  listRenewalReminderCandidates,
+  reminderTypeForDays,
+  resolveRenewalSettings,
+  shouldAutoExpireContract,
+} from "@/lib/renewal-workflow";
 import { isDatabaseConfigured } from "@/lib/prisma";
 import {
   approveAndPersist,
@@ -669,10 +681,113 @@ async function runTemplatePersistenceTests(): Promise<void> {
   }
 }
 
+function runRenewalWorkflowUnitTests(): void {
+  const activeContract = createContractFromIntake(
+    {
+      ...buildTestIntake("renewal"),
+      contractEndDate: "2026-09-01",
+      otherNotes: "Auto renewal enabled with 30-day notice period.",
+    },
+    {
+      id: "renewal-test-id",
+      recordNumber: "CR-RENEWAL-001",
+    },
+  );
+
+  const activeWithStage = {
+    ...activeContract,
+    stage: "active" as const,
+    contractEndDate: "2026-09-01",
+  };
+
+  const settings = resolveRenewalSettings(activeWithStage);
+
+  assert(
+    "Renewal settings inferred from notes",
+    settings.autoRenewal && settings.renewalNoticeDays === 30,
+    `autoRenewal=${settings.autoRenewal}, notice=${settings.renewalNoticeDays}`,
+  );
+
+  assert(
+    "Renewal action deadline subtracts notice period",
+    computeRenewalActionDeadline("2026-09-01", 30) === "2026-08-02",
+    computeRenewalActionDeadline("2026-09-01", 30) ?? "none",
+  );
+
+  assert(
+    "Reminder type maps to threshold day",
+    reminderTypeForDays(30) === "notice_30",
+    reminderTypeForDays(30) ?? "none",
+  );
+
+  const entry = buildRenewalQueueEntry(activeWithStage, "2026-08-15");
+
+  assert(
+    "Renewal queue includes active contract in notice window",
+    Boolean(entry && entry.displayStatus === "notice_window"),
+    entry?.displayStatus ?? "missing entry",
+  );
+
+  assert(
+    "Renewal queue filter returns notice-window contracts",
+    listRenewalQueue([activeWithStage], { windowDays: 90 }, "2026-08-15").length ===
+      1,
+    "filtered count",
+  );
+
+  const reminderCandidates = listRenewalReminderCandidates(
+    [activeWithStage],
+    "2026-08-02",
+  );
+
+  assert(
+    "Action deadline generates reminder candidate",
+    reminderCandidates.some(
+      (candidate) => candidate.reminderType === "action_deadline",
+    ),
+    `count=${reminderCandidates.length}`,
+  );
+
+  assert(
+    "Manual contracts past expiration should auto-expire",
+    shouldAutoExpireContract(
+      {
+        ...activeWithStage,
+        autoRenewal: false,
+        renewalStatus: "not_due",
+      },
+      "2026-09-02",
+    ),
+    "expected auto-expire",
+  );
+
+  const renewalIntake = buildRenewalIntakeInput(activeWithStage, LEGAL_USER);
+
+  assert(
+    "Renewal intake links to parent agreement",
+    renewalIntake.parentAgreementId === activeWithStage.id,
+    renewalIntake.parentAgreementId ?? "none",
+  );
+
+  assert(
+    "Computed renewal status enters notice window",
+    deriveComputedRenewalStatus(activeWithStage, "2026-08-15") ===
+      "notice_window",
+    deriveComputedRenewalStatus(activeWithStage, "2026-08-15"),
+  );
+
+  assert(
+    "Days until expiration calculated correctly",
+    computeDaysUntilDate("2026-09-01", "2026-08-15") === 17,
+    String(computeDaysUntilDate("2026-09-01", "2026-08-15")),
+  );
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
   runWorkflowUnitTests();
+  runRenewalWorkflowUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();

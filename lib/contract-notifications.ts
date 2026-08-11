@@ -133,3 +133,48 @@ export async function sendContractReassignmentNotification(
     });
   }
 }
+
+export async function sendRenewalReminderNotification(input: {
+  contract: ContractRecord;
+  to: string;
+  recipientName: string;
+  reminderLabel: string;
+  expirationDate: string;
+  actionDeadline: string | null;
+  daysUntilExpiration: number;
+  autoRenewal: boolean;
+}): Promise<void> {
+  const contractUrl = buildContractUrl(input.contract.id);
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.APP_URL?.trim() ||
+    "http://localhost:3000";
+  const renewalUrl = `${baseUrl.replace(/\/$/, "")}/renewals`;
+  const autoRenewalLine = input.autoRenewal
+    ? "This agreement is configured to auto-renew unless notice is given."
+    : "This agreement requires an explicit renewal decision.";
+
+  await dispatchContractEmail({
+    contract: input.contract,
+    to: input.to,
+    subject: `Renewal reminder: ${input.contract.title} (${input.contract.recordNumber})`,
+    body: [
+      `Hello ${input.recipientName},`,
+      "",
+      `${input.reminderLabel} for ${input.contract.recordNumber} (${input.contract.title}).`,
+      `Expiration date: ${input.expirationDate}.`,
+      input.actionDeadline
+        ? `Renewal notice deadline: ${input.actionDeadline}.`
+        : "",
+      input.daysUntilExpiration >= 0
+        ? `${input.daysUntilExpiration} day(s) remaining until expiration.`
+        : "This contract is past its expiration date.",
+      autoRenewalLine,
+      "",
+      `Review renewal queue: ${renewalUrl}`,
+      `Open contract: ${contractUrl}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  });
+}

@@ -11,6 +11,7 @@ import { UploadContractAttachmentForm } from "@/components/contracts/UploadContr
 import { ContractRelatedEmails } from "@/components/contracts/ContractRelatedEmails";
 import { ContractESignatureSection } from "@/components/contracts/ContractESignatureSection";
 import { ContractObligationsCard } from "@/components/contracts/ContractObligationsCard";
+import { ContractRenewalPanel } from "@/components/contracts/ContractRenewalPanel";
 import { WorkflowTimeline } from "@/components/contracts/WorkflowTimeline";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
 import { useTier } from "@/components/providers/TierProvider";
@@ -336,6 +337,13 @@ function readContractVariable(
 }
 
 function readAutoRenewal(contract: ContractRecord): string | null {
+  if (typeof contract.autoRenewal === "boolean") {
+    const noticeDays = contract.renewalNoticeDays ?? 30;
+    return contract.autoRenewal
+      ? `Yes (${noticeDays}-day notice)`
+      : "No";
+  }
+
   const variableValue = readContractVariable(contract, [
     "auto_renewal",
     "autoRenewal",
@@ -1815,7 +1823,14 @@ export function ContractDetailClient({
       ) : null}
 
       {isPrivilegedUser ? (
-        <ContractObligationsCard contractId={contract.id} />
+        <>
+          <ContractRenewalPanel
+            contract={contract}
+            isPrivilegedUser={isPrivilegedUser}
+            onContractUpdated={(updated) => setContract(updated)}
+          />
+          <ContractObligationsCard contractId={contract.id} />
+        </>
       ) : null}
 
       <section className={editCardClass(isEditing, CARD_CLASS)}>

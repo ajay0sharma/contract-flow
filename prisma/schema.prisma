@@ -96,6 +96,24 @@ enum ContractLifecycleStatus {
   rejected
 }
 
+enum RenewalStatus {
+  not_due
+  notice_window
+  renewal_in_progress
+  renewed
+  non_renewing
+}
+
+enum RenewalReminderType {
+  notice_90
+  notice_60
+  notice_30
+  notice_14
+  notice_7
+  expiration_day
+  action_deadline
+}
+
 enum PoProvider {
   coupa
   sap
@@ -192,6 +210,11 @@ model Contract {
   effectiveDate               DateTime?
   activatedAt                 DateTime?
   expiredAt                   DateTime?
+  autoRenewal                 Boolean              @default(false)
+  renewalNoticeDays           Int                  @default(30)
+  renewalStatus               RenewalStatus        @default(not_due)
+  renewedFromContractId       String?
+  renewalStartedAt            DateTime?
   contractStatus              ContractLifecycleStatus @default(draft)
   executedDocumentPath        String?
   executedDocumentName        String?
@@ -210,6 +233,7 @@ model Contract {
   riskFactors                 RiskFactor[]
   clauseUsages                ClauseUsage[]
   signatureEnvelopes          SignatureEnvelope[]
+  renewalReminders            ContractRenewalReminder[]
   createdAt                   DateTime             @default(now())
   updatedAt                   DateTime             @updatedAt
 
@@ -220,8 +244,24 @@ model Contract {
   @@index([contractStatus])
   @@index([activatedAt])
   @@index([expiryDate])
+  @@index([renewalStatus])
   @@index([requesterEmail])
   @@index([contractType])
+}
+
+model ContractRenewalReminder {
+  id             String               @id @default(cuid())
+  organizationId String
+  contractId     String
+  contract       Contract             @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  reminderType   RenewalReminderType
+  recipientEmail String
+  sentAt         DateTime             @default(now())
+
+  @@unique([contractId, reminderType, recipientEmail])
+  @@index([organizationId])
+  @@index([contractId])
+  @@index([sentAt])
 }
 
 model Obligation {
