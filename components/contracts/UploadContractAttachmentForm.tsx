@@ -2,7 +2,6 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { addContractAttachmentAction } from "@/app/actions/contracts";
 import {
   INTAKE_DOCUMENT_TYPE_LABELS,
   INTAKE_DOCUMENT_TYPES,
@@ -14,30 +13,6 @@ interface UploadContractAttachmentFormProps {
   contractId: string;
   onUploaded?: () => void | Promise<void>;
   variant?: "default" | "detail";
-}
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        reject(new Error("Unable to read the selected file."));
-        return;
-      }
-
-      const base64 = reader.result.split(",")[1];
-
-      if (!base64) {
-        reject(new Error("Unable to read the selected file."));
-        return;
-      }
-
-      resolve(base64);
-    };
-    reader.onerror = () => reject(new Error("Unable to read the selected file."));
-    reader.readAsDataURL(file);
-  });
 }
 
 export function UploadContractAttachmentForm({
@@ -70,13 +45,25 @@ export function UploadContractAttachmentForm({
 
     startTransition(async () => {
       try {
-        await addContractAttachmentAction(contractId, {
-          fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
-          sizeBytes: file.size,
-          documentType,
-          dataBase64: await readFileAsBase64(file),
+        const formData = new FormData();
+        formData.set("file", file);
+        formData.set("documentType", documentType);
+
+        const response = await fetch(`/api/contracts/${contractId}/attachments`, {
+          method: "POST",
+          body: formData,
         });
+
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(payload && "error" in payload && payload.error
+            ? payload.error
+            : "Unable to upload document.");
+        }
+
         setMessage(`Uploaded ${file.name}.`);
         setDocumentType("");
         setFile(null);

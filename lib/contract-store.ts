@@ -39,14 +39,20 @@ function normalizeEmail(email: string): string {
 }
 
 function normalizeAttachment(attachment: ContractAttachment): ContractAttachment {
-  return {
+  const normalized: ContractAttachment = {
     ...attachment,
     title: attachment.title ?? attachment.fileName ?? "Untitled document",
     fileName: attachment.fileName ?? attachment.title ?? "document",
     uploadedByName: attachment.uploadedByName ?? "Unknown user",
     uploadedByEmail: attachment.uploadedByEmail ?? "",
-    dataBase64: attachment.dataBase64 ?? "",
+    storagePath: attachment.storagePath?.trim() || undefined,
   };
+
+  if (!normalized.storagePath && attachment.dataBase64?.trim()) {
+    normalized.dataBase64 = attachment.dataBase64;
+  }
+
+  return normalized;
 }
 
 function normalizeRelatedEmail(email: ContractEmail): ContractEmail {

@@ -21,6 +21,10 @@ import { applyRenewalSettingsToRecord } from "@/lib/renewal-workflow";
 import { sendContractIntakeNotification } from "@/lib/contract-notifications";
 import { appendRelatedEmailToRecord, addContractEmail, normalizeContractRecord } from "@/lib/contract-store";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
+import {
+  persistAttachmentToObjectStorage,
+  persistContractAttachmentsToObjectStorage,
+} from "@/lib/contract-attachment-storage";
 import { getPrismaClient } from "@/lib/prisma";
 import { safeTrim } from "@/lib/string-utils";
 import { captureException } from "@/lib/error-reporting";
@@ -347,12 +351,19 @@ export async function saveContractRecord(
 ): Promise<void> {
   const prisma = getPrismaClient();
   const organizationId = resolveOrganizationId(record);
+  const recordWithStorage = await persistContractAttachmentsToObjectStorage(
+    record,
+    organizationId,
+  );
   const existing = await prisma.contract.findUnique({
-    where: { id: record.id },
+    where: { id: recordWithStorage.id },
   });
-  const lifecycle = resolveLifecycleWriteFields(record.stage, existing);
+  const lifecycle = resolveLifecycleWriteFields(
+    recordWithStorage.stage,
+    existing,
+  );
   const data = {
-    ...mapRecordToPrismaData(record, organizationId),
+    ...mapRecordToPrismaData(recordWithStorage, organizationId),
     contractStatus: lifecycle.contractStatus,
     ...(lifecycle.activatedAt ? { activatedAt: lifecycle.activatedAt } : {}),
     ...(lifecycle.expiredAt ? { expiredAt: lifecycle.expiredAt } : {}),
@@ -1102,15 +1113,10 @@ export async function addContractAttachmentAndPersist(
   input: ContractIntakeAttachmentInput,
   actor: { email: string; name: string },
 ): Promise<ContractRecord> {
-  const contract = await loadContractRecord(contractId, organizationId);
-
-  if (!contract) {
-    throw new Error("Contract not found.");
-  }
-
   const timestamp = new Date().toISOString();
-  const attachment: ContractAttachment = {
-    id: `att-${Date.now()}`,
+  const attachmentId = `att-${Date.now()}`;
+  let attachment: ContractAttachment = {
+    id: attachmentId,
     title: input.fileName,
     fileName: input.fileName,
     mimeType: input.mimeType,
@@ -1121,9 +1127,36 @@ export async function addContractAttachmentAndPersist(
     uploadedByEmail: actor.email,
     dataBase64: input.dataBase64,
   };
+
+  return appendContractAttachmentAndPersist(
+    contractId,
+    organizationId,
+    attachment,
+    actor,
+  );
+}
+
+export async function appendContractAttachmentAndPersist(
+  contractId: string,
+  organizationId: string,
+  attachment: ContractAttachment,
+  actor: { email: string; name: string },
+): Promise<ContractRecord> {
+  const contract = await loadContractRecord(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const timestamp = new Date().toISOString();
+  const storedAttachment = await persistAttachmentToObjectStorage(
+    attachment,
+    organizationId,
+    contractId,
+  );
   const updated = normalizeContractRecord({
     ...contract,
-    attachments: [...(contract.attachments ?? []), attachment],
+    attachments: [...(contract.attachments ?? []), storedAttachment],
     auditTrail: [
       ...(contract.auditTrail ?? []),
       {
@@ -1132,7 +1165,7 @@ export async function addContractAttachmentAndPersist(
         actorName: actor.name,
         actorEmail: actor.email,
         action: "Document uploaded",
-        detail: `${attachment.title} was uploaded to the contract record.`,
+        detail: `${storedAttachment.title} was uploaded to the contract record.`,
       },
     ],
     updatedAt: timestamp,

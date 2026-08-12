@@ -23,9 +23,14 @@ import {
   shouldAutoExpireContract,
 } from "@/lib/renewal-workflow";
 import {
+  sanitizeAttachmentForClient,
+  sanitizeContractRecordForClient,
+} from "@/lib/contract-attachment-storage";
+import {
   matchesContractSearchTerms,
   parseContractSearchTerms,
 } from "@/lib/contract-search-service";
+import { buildContractAttachmentStoragePath } from "@/lib/supabase-storage";
 import { normalizeWorkflowPolicy } from "@/lib/workflow-policy-normalize";
 import { reminderTypeForDay } from "@/lib/approval-escalation-service";
 import {
@@ -974,6 +979,59 @@ function runContractSearchUnitTests(): void {
   );
 }
 
+
+
+function runAttachmentStorageUnitTests(): void {
+  const path = buildContractAttachmentStoragePath(
+    "default",
+    "contract-123",
+    "att-456",
+    "Vendor Agreement.pdf",
+  );
+
+  assert(
+    "Attachment storage path includes contract and attachment ids",
+    path.includes("contract-123") && path.includes("att-456"),
+    path,
+  );
+
+  const sanitized = sanitizeAttachmentForClient({
+    id: "att-1",
+    title: "Test.pdf",
+    fileName: "Test.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 100,
+    documentType: "supporting_document",
+    uploadedAt: "2026-01-01T00:00:00.000Z",
+    uploadedByName: "Tester",
+    uploadedByEmail: "tester@example.com",
+    storagePath: "contracts/default/c1/attachments/att-1/Test.pdf",
+    dataBase64: "abc123",
+  });
+
+  assert(
+    "Attachment client payload omits base64 content",
+    Boolean(
+      sanitized.storagePath?.includes("attachments/att-1") &&
+        !("dataBase64" in sanitized),
+    ),
+    JSON.stringify(sanitized),
+  );
+
+  const record = createContractFromIntake(buildTestIntake("attachment-sanitize"), {
+    id: "attachment-sanitize-id",
+    recordNumber: "CR-ATT-001",
+  });
+
+  const sanitizedRecord = sanitizeContractRecordForClient(record);
+
+  assert(
+    "Contract client payload strips attachment base64 blobs",
+    sanitizedRecord.attachments.every((attachment) => !("dataBase64" in attachment)),
+    String(sanitizedRecord.attachments.length),
+  );
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
@@ -981,6 +1039,7 @@ async function main(): Promise<void> {
   runRenewalWorkflowUnitTests();
   runWorkflowPolicyUnitTests();
   runContractSearchUnitTests();
+  runAttachmentStorageUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();

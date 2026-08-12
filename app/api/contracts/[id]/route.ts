@@ -6,6 +6,8 @@ import {
   loadContractRecord,
   mapPrismaContractToRecord,
 } from "@/lib/contract-persistence";
+import { sanitizeContractRecordForClient } from "@/lib/contract-attachment-storage";
+import { canViewContractRecord } from "@/lib/contract-store";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type {
@@ -17,10 +19,6 @@ import { getPrismaClient } from "@/lib/prisma";
 import { isAdminEmail, isLegalEmail } from "@/lib/legal-access";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import type { AuditEvent } from "@/types/contract";
-
-function isPrivilegedUser(email: string): boolean {
-  return isLegalEmail(email) || isAdminEmail(email);
-}
 
 export async function GET(
   _request: Request,
@@ -48,16 +46,11 @@ export async function GET(
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });
     }
 
-    if (!isPrivilegedUser(actorEmail)) {
-      const isRequester =
-        record.requesterEmail.trim().toLowerCase() === actorEmail.toLowerCase();
-
-      if (!isRequester) {
-        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-      }
+    if (!canViewContractRecord(record, actorEmail)) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    return NextResponse.json(record);
+    return NextResponse.json(sanitizeContractRecordForClient(record));
   } catch (error) {
     reportError(error, { route: "GET /api/contracts/[id]", contractId: id });
     return NextResponse.json(
@@ -296,7 +289,7 @@ export async function PATCH(
     );
 
     if (fieldsUpdated.length === 0) {
-      return NextResponse.json(existing);
+      return NextResponse.json(sanitizeContractRecordForClient(existing));
     }
 
     const auditEvent: AuditEvent = {
@@ -334,7 +327,9 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json(mapPrismaContractToRecord(updated));
+    return NextResponse.json(
+      sanitizeContractRecordForClient(mapPrismaContractToRecord(updated)),
+    );
   } catch (error) {
     reportError(error, { route: "PATCH /api/contracts/[id]", contractId: id });
     return NextResponse.json(

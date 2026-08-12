@@ -9,6 +9,7 @@ export const CONTRACT_DOCUMENTS_BUCKET = "contract-documents";
 export const ORGANIZATION_BRANDING_BUCKET = "organization-branding";
 export const MAX_TEMPLATE_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_EXECUTED_DOCUMENT_BYTES = 50 * 1024 * 1024;
+export const MAX_CONTRACT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const MAX_ORGANIZATION_LOGO_BYTES = 2 * 1024 * 1024;
 
 export function formatTemplateFileSizeMb(bytes: number): string {
@@ -252,6 +253,37 @@ export function buildGeneratedDraftStoragePath(
 ): string {
   const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   return `contracts/${organizationId}/${contractId}/draft/${safeName}`;
+}
+
+export function buildContractAttachmentStoragePath(
+  organizationId: string,
+  contractId: string,
+  attachmentId: string,
+  fileName: string,
+): string {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `contracts/${organizationId}/${contractId}/attachments/${attachmentId}/${safeName}`;
+}
+
+export async function uploadContractAttachment(
+  storagePath: string,
+  fileBuffer: Buffer,
+  contentType: string,
+): Promise<void> {
+  await uploadExecutedDocument(storagePath, fileBuffer, contentType);
+}
+
+export async function downloadContractAttachment(
+  storagePath: string,
+): Promise<Buffer> {
+  return downloadExecutedDocument(storagePath);
+}
+
+export async function createContractAttachmentSignedUrl(
+  storagePath: string,
+  expiresInSeconds = 1800,
+): Promise<string> {
+  return createExecutedDocumentSignedUrl(storagePath, expiresInSeconds);
 }
 
 export async function uploadGeneratedDraftDocument(

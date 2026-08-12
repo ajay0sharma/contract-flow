@@ -85,7 +85,8 @@ export interface ContractAttachment {
   uploadedAt: string;
   uploadedByName: string;
   uploadedByEmail: string;
-  dataBase64: string;
+  storagePath?: string;
+  dataBase64?: string;
 }
 
 export interface ContractIntakeAttachmentInput {

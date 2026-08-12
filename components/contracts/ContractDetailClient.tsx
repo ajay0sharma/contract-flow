@@ -576,8 +576,53 @@ function FileTypeIcon({ mimeType }: { mimeType: string }) {
   );
 }
 
-function AttachmentRow({ attachment }: { attachment: ContractAttachment }) {
-  const dataUrl = `data:${attachment.mimeType};base64,${attachment.dataBase64}`;
+function AttachmentRow({
+  attachment,
+  contractId,
+}: {
+  attachment: ContractAttachment;
+  contractId: string;
+}) {
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDownloadUrl(): Promise<void> {
+      setDownloadError(null);
+      setDownloadUrl(null);
+
+      try {
+        const response = await fetch(
+          `/api/contracts/${contractId}/attachments/${attachment.id}/download`,
+        );
+        const payload = (await response.json().catch(() => null)) as
+          | { url?: string; error?: string }
+          | null;
+
+        if (!response.ok || !payload?.url) {
+          throw new Error(payload?.error ?? "Unable to load download link.");
+        }
+
+        if (!cancelled) {
+          setDownloadUrl(payload.url);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDownloadError(
+            error instanceof Error ? error.message : "Unable to load download link.",
+          );
+        }
+      }
+    }
+
+    void loadDownloadUrl();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment.id, contractId]);
 
   return (
     <div className="flex items-start gap-3 border-t border-gray-100 pt-4 first:border-t-0 first:pt-0">
@@ -594,14 +639,25 @@ function AttachmentRow({ attachment }: { attachment: ContractAttachment }) {
           Uploaded by {attachment.uploadedByName} on{" "}
           {formatContractDateTime(attachment.uploadedAt)}
         </p>
+        {downloadError ? (
+          <p className="mt-1 text-xs text-rose-600">{downloadError}</p>
+        ) : null}
       </div>
-      <a
-        href={dataUrl}
-        download={attachment.fileName}
-        className="shrink-0 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-gray-50"
-      >
-        Download
-      </a>
+      {downloadUrl ? (
+        <a
+          href={downloadUrl}
+          download={attachment.fileName}
+          target={downloadUrl.startsWith("data:") ? undefined : "_blank"}
+          rel={downloadUrl.startsWith("data:") ? undefined : "noopener noreferrer"}
+          className="shrink-0 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-gray-50"
+        >
+          Download
+        </a>
+      ) : (
+        <span className="shrink-0 rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-400">
+          Loading...
+        </span>
+      )}
     </div>
   );
 }
@@ -1864,7 +1920,7 @@ export function ContractDetailClient({
         ) : (
           <div className="mt-4 space-y-4">
             {contract.attachments.map((attachment) => (
-              <AttachmentRow key={attachment.id} attachment={attachment} />
+              <AttachmentRow key={attachment.id} attachment={attachment} contractId={contract.id} />
             ))}
           </div>
         )}

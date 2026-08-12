@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { getCompanyConfig } from "@/lib/company-config";
-import { decodeAttachmentText } from "@/lib/obligation-documents";
+import { decodeAttachmentTextFromStorage } from "@/lib/contract-attachment-storage";
 import {
   OBLIGATION_TYPES,
   type ObligationScanResult,
@@ -165,12 +165,12 @@ function buildMockScanResult(
   };
 }
 
-function buildPrompt(
+async function buildPrompt(
   contract: ContractRecord,
   attachment: ContractAttachment,
-): string {
+): Promise<string> {
   const company = getCompanyConfig(contract.companyProfileId);
-  const attachmentText = decodeAttachmentText(attachment);
+  const attachmentText = await decodeAttachmentTextFromStorage(attachment);
 
   return [
     "You are a legal contract analyst.",
@@ -202,7 +202,7 @@ async function scanWithOpenAI(
   }
 
   const client = new OpenAI({ apiKey });
-  const prompt = buildPrompt(contract, attachment);
+  const prompt = await buildPrompt(contract, attachment);
 
   const response = await client.chat.completions.create({
     model: process.env.OPENAI_OBLIGATION_MODEL ?? "gpt-4o-mini",
