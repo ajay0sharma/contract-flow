@@ -15,7 +15,7 @@ import {
   storeProviderMessageId,
 } from "@/lib/contract-email-dedup";
 import { sendContractRecordEmail } from "@/lib/contract-email-service";
-import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { loadSyncedContractRecord } from "@/lib/contract-record-loader";
 import { prepareContractForWorkflowAction } from "@/lib/legal-assignment";
 import { applyRenewalSettingsToRecord } from "@/lib/renewal-workflow";
 import { sendContractIntakeNotification } from "@/lib/contract-notifications";
@@ -478,6 +478,11 @@ export async function createAndPersistContract(
   input: ContractIntakeInput,
   organizationId: string,
 ): Promise<ContractRecord> {
+  const { ensureWorkflowConfigLoaded } = await import(
+    "@/lib/workflow-config-server"
+  );
+  await ensureWorkflowConfigLoaded(organizationId);
+
   const id = randomUUID();
   const recordNumber = await generateUniqueRecordNumber();
   let record = applyRenewalSettingsToRecord({
@@ -559,7 +564,7 @@ export async function approveAndPersist(
   approverName: string,
   note?: string,
 ): Promise<ContractRecord> {
-  const contract = await loadMergedContractRecord(contractId, organizationId);
+  const contract = await loadSyncedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -588,7 +593,7 @@ export async function rejectAndPersist(
   approverName: string,
   note?: string,
 ): Promise<ContractRecord> {
-  const contract = await loadMergedContractRecord(contractId, organizationId);
+  const contract = await loadSyncedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -618,7 +623,7 @@ export async function reassignAndPersist(
   note?: string,
   targetAssigneeEmail?: string,
 ): Promise<ContractRecord> {
-  const contract = await loadContractRecord(contractId, organizationId);
+  const contract = await loadSyncedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -641,7 +646,7 @@ export async function assignLegalReviewerAndPersist(
   assignee: { email: string; name: string },
   actor: { email: string; name: string },
 ): Promise<ContractRecord> {
-  const contract = await loadMergedContractRecord(contractId, organizationId);
+  const contract = await loadSyncedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -748,7 +753,7 @@ export async function addContractEmailAndPersist(
   input: AddContractEmailInput,
   actor: { name: string; email: string },
 ): Promise<ContractRecord> {
-  const contract = await loadMergedContractRecord(contractId, organizationId);
+  const contract = await loadSyncedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -794,7 +799,7 @@ export async function sendContractEmailAndPersist(
   input: SendContractEmailInput,
   actor: { name: string; email: string },
 ): Promise<ContractRecord> {
-  const contract = await loadMergedContractRecord(contractId, organizationId);
+  const contract = await loadSyncedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -882,7 +887,7 @@ export async function syncInboundContractEmailAndPersist(
     throw new Error("Contract record does not belong to this client organization.");
   }
 
-  const contract = await loadMergedContractRecord(
+  const contract = await loadSyncedContractRecord(
     located.contractId,
     located.organizationId,
   );

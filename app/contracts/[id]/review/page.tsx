@@ -10,10 +10,8 @@ import {
   getCurrentApprover,
   resolveContractRecordNumber,
 } from "@/lib/contracts";
-import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { loadSyncedContractRecord } from "@/lib/contract-record-loader";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
-import { allowMemoryPersistence } from "@/lib/persistence-mode";
-import { getContractById } from "@/lib/contract-store";
 import { isSupportEmail } from "@/lib/access-control";
 
 interface ReviewPageProps {
@@ -22,12 +20,10 @@ interface ReviewPageProps {
 
 export default async function ReviewPage({ params }: ReviewPageProps) {
   const { id } = await params;
-  const contract = allowMemoryPersistence()
-    ? getContractById(id)
-    : await loadMergedContractRecord(
-        id,
-        resolveClauseLibraryOrganizationId(),
-      );
+  const contract = await loadSyncedContractRecord(
+    id,
+    resolveClauseLibraryOrganizationId(),
+  );
   const user = await currentUser();
 
   if (!user) {

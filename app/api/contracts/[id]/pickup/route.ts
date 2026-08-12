@@ -7,7 +7,7 @@ import { reportError } from "@/lib/error-reporting";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { assignContractLegalReviewer } from "@/lib/contract-store";
 import { isAwaitingLegalPickup } from "@/lib/legal-assignment";
-import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { loadSyncedContractRecord } from "@/lib/contract-record-loader";
 
 export async function POST(
   _request: Request,
@@ -27,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });
     }
 
-    const existing = await loadMergedContractRecord(id, organizationId);
+    const existing = await loadSyncedContractRecord(id, organizationId);
 
     if (!existing) {
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });

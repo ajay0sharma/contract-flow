@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
 import { requireLegalOrAdminApiActor } from "@/lib/api-privileged-auth";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { loadSyncedContractRecord } from "@/lib/contract-record-loader";
 import {
   loadContractRecord,
   reassignAndPersist,
@@ -25,7 +26,7 @@ export async function POST(
   try {
     const { id } = await context.params;
     const organizationId = resolveClauseLibraryOrganizationId();
-    const existing = await loadContractRecord(id, organizationId);
+    const existing = await loadSyncedContractRecord(id, organizationId);
 
     if (!existing) {
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });

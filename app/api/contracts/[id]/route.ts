@@ -8,7 +8,7 @@ import {
 } from "@/lib/contract-persistence";
 import { sanitizeContractRecordForClient } from "@/lib/contract-attachment-storage";
 import { canViewContractRecord } from "@/lib/contract-store";
-import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { loadSyncedContractRecord } from "@/lib/contract-record-loader";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type {
   ContractLifecycleStatus,
@@ -40,7 +40,7 @@ export async function GET(
 
   try {
     const organizationId = resolveClauseLibraryOrganizationId();
-    const record = await loadMergedContractRecord(id, organizationId);
+    const record = await loadSyncedContractRecord(id, organizationId);
 
     if (!record) {
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });

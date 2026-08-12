@@ -25,12 +25,24 @@ export async function updateWorkflowConfig(
     }
 
     globalStore.__workflowConfigByOrg.set(organizationId, normalized);
+
+    const { syncNonActiveContractWorkflows } = await import(
+      "@/lib/workflow-contract-sync"
+    );
+    await syncNonActiveContractWorkflows(organizationId);
+
     return getWorkflowConfig(organizationId);
   }
 
   const { saveWorkflowConfigToDatabase } = await import("@/lib/platform-data-db");
   await saveWorkflowConfigToDatabase(normalized, organizationId);
   setCachedWorkflowConfig(organizationId, normalized);
+
+  const { syncNonActiveContractWorkflows } = await import(
+    "@/lib/workflow-contract-sync"
+  );
+  await syncNonActiveContractWorkflows(organizationId);
+
   return cloneAndNormalizeWorkflowConfig(normalized);
 }
 

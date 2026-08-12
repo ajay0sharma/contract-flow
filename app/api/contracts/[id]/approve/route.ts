@@ -9,7 +9,7 @@ import {
 import {
   approveAndPersist,
 } from "@/lib/contract-persistence";
-import { loadMergedContractRecord } from "@/lib/contract-list-service";
+import { loadSyncedContractRecord } from "@/lib/contract-record-loader";
 import { reportError } from "@/lib/error-reporting";
 import { getUserDisplayName } from "@/lib/user-display-name";
 
@@ -38,7 +38,7 @@ export async function POST(
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });
     }
 
-    const existing = await loadMergedContractRecord(id, organizationId);
+    const existing = await loadSyncedContractRecord(id, organizationId);
 
     if (!existing) {
       return NextResponse.json({ error: "Contract not found." }, { status: 404 });

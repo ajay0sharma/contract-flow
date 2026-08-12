@@ -151,6 +151,21 @@ export function normalizeContractRecord(
   };
 }
 
+export function replaceContractRecordInMemory(
+  contract: ContractRecord,
+): ContractRecord {
+  const store = getStore();
+  const index = store.findIndex((entry) => entry.id === contract.id);
+
+  if (index === -1) {
+    throw new Error("Contract not found.");
+  }
+
+  const updated = normalizeContractRecord(contract);
+  store[index] = updated;
+  return updated;
+}
+
 function buildSeedContract(
   partial: Omit<
     ContractRecord,
@@ -1328,3 +1343,42 @@ export function addContractEmail(
 }
 
 export { parseContractAmount };
+
+export async function syncNonActiveContractWorkflowsInMemory(
+  organizationId: string,
+): Promise<number> {
+  const {
+    reconcileContractWorkflowWithConfig,
+    contractWorkflowNeedsSync,
+    shouldSyncContractWorkflow,
+  } = await import("@/lib/workflow-contract-reconcile");
+  const store = getStore();
+  let updatedCount = 0;
+
+  for (let index = 0; index < store.length; index += 1) {
+    const contract = store[index];
+
+    if (contract.companyProfileId !== organizationId) {
+      continue;
+    }
+
+    if (!shouldSyncContractWorkflow(contract)) {
+      continue;
+    }
+
+    const reconciled = reconcileContractWorkflowWithConfig(
+      contract,
+      contract.companyProfileId,
+    );
+
+    if (!contractWorkflowNeedsSync(contract, reconciled)) {
+      continue;
+    }
+
+    store[index] = normalizeContractRecord(reconciled);
+    updatedCount += 1;
+  }
+
+  return updatedCount;
+}
+

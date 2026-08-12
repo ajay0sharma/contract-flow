@@ -27,6 +27,7 @@ import {
   updateContractRecordDetailsAndPersist,
 } from "@/lib/contract-persistence";
 import { loadContractRecordByLookup, loadMergedContractRecord } from "@/lib/contract-list-service";
+import { loadSyncedContractRecord } from "@/lib/contract-record-loader";
 import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { createCounterparty } from "@/lib/counterparty-store";
@@ -56,6 +57,7 @@ import {
 import { resolveAgreementTypeRules } from "@/lib/contract-type-agreement-rules";
 import { listContractTypes } from "@/lib/contract-type-store";
 import { getWorkflowConfig } from "@/lib/workflow-config-read";
+import { ensureWorkflowConfigLoaded } from "@/lib/workflow-config-server";
 import {
   getContractTemplateById,
   validateIntakeTemplateReference,
@@ -93,9 +95,7 @@ async function requireCanViewContract(
   actorEmail: string,
 ): Promise<ContractRecord> {
   const organizationId = await resolveOrganizationIdForContract(contractId);
-  const contract = allowMemoryPersistence()
-    ? await loadMergedContractRecord(contractId, organizationId)
-    : await loadMergedContractRecord(contractId, organizationId);
+  const contract = await loadSyncedContractRecord(contractId, organizationId);
 
   if (!contract) {
     throw new Error("Contract not found.");
@@ -119,10 +119,11 @@ export async function submitIntakeAction(
     throw new Error("Select whether this contract is budgeted (Yes or No).");
   }
 
-  const workflowConfig = getWorkflowConfig();
   const organizationId = resolveClauseLibraryOrganizationId(
     input.companyProfileId,
   );
+  await ensureWorkflowConfigLoaded(organizationId);
+  const workflowConfig = getWorkflowConfig(organizationId);
   const contractTypes = await listContractTypes(organizationId);
   const agreementTypeRules = resolveAgreementTypeRules(
     contractTypes,

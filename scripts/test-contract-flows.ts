@@ -66,6 +66,13 @@ import {
   getCurrentApprover,
   resolveWorkflowSteps,
 } from "@/lib/workflow-engine";
+import {
+  reconcileContractWorkflowWithConfig,
+  shouldSyncContractWorkflow,
+} from "@/lib/workflow-contract-reconcile";
+import { getDefaultWorkflowConfig } from "@/lib/workflow-store-defaults";
+import { createCustomWorkflowStep } from "@/lib/workflow-config-types";
+import { updateWorkflowConfig } from "@/lib/workflow-store";
 import { mergeDocxPlaceholders } from "@/lib/contract-template-docx";
 import JSZip from "jszip";
 
@@ -1062,10 +1069,131 @@ function runAttachmentStorageUnitTests(): void {
   );
 }
 
+
+async function runWorkflowSyncUnitTests(): Promise<void> {
+  const draft = createContractFromIntake(
+    { ...buildTestIntake("workflow-sync"), contractAmount: "30000" },
+    {
+      id: "workflow-sync-id",
+      recordNumber: "CR-WF-SYNC-001",
+    },
+  );
+
+  assert(
+    "Non-active contracts should receive workflow sync",
+    shouldSyncContractWorkflow(draft),
+    draft.stage,
+  );
+
+  assert(
+    "Active contracts skip workflow sync",
+    !shouldSyncContractWorkflow({ ...draft, stage: "active" }),
+    "active",
+  );
+
+  assert(
+    "Awaiting signature contracts skip workflow sync",
+    !shouldSyncContractWorkflow({ ...draft, stage: "awaiting_signature" }),
+    "awaiting_signature",
+  );
+
+  assert(
+    "Rejected contracts skip workflow sync",
+    !shouldSyncContractWorkflow({ ...draft, stage: "rejected" }),
+    "rejected",
+  );
+
+  const pickedUp = assignLegalReviewerStep(
+    draft,
+    { email: LEGAL_USER.email, name: LEGAL_USER.name },
+    LEGAL_USER,
+  );
+
+  const updatedConfig = structuredClone(getDefaultWorkflowConfig());
+  const financeStep = updatedConfig.steps.find((step) => step.id === "finance");
+
+  if (!financeStep) {
+    throw new Error("Finance workflow step missing from default config.");
+  }
+
+  financeStep.assigneeEmail = "workflow-sync-finance@example.com";
+  financeStep.assigneeName = "Workflow Sync Finance";
+
+  await updateWorkflowConfig(updatedConfig, ORG_ID);
+
+  const reconciledDraft = reconcileContractWorkflowWithConfig(draft, ORG_ID);
+  const reconciledFinance = reconciledDraft.workflowSteps.find(
+    (step) => step.id === "finance",
+  );
+
+  assert(
+    "Workflow sync applies updated assignees to non-active contracts",
+    reconciledFinance?.assigneeEmail === "workflow-sync-finance@example.com",
+    reconciledFinance?.assigneeEmail ?? "missing finance step",
+  );
+
+  const reconciledPickedUp = reconcileContractWorkflowWithConfig(
+    pickedUp,
+    ORG_ID,
+  );
+  const reconciledLegal = reconciledPickedUp.workflowSteps.find(
+    (step) => step.id === "legal",
+  );
+
+  assert(
+    "Workflow sync preserves picked-up legal owner",
+    reconciledLegal?.assigneeEmail === LEGAL_USER.email,
+    reconciledLegal?.assigneeEmail ?? "missing legal step",
+  );
+
+  const customStep = createCustomWorkflowStep();
+  customStep.name = "Security review";
+  customStep.assigneeEmail = "security@example.com";
+  customStep.assigneeName = "Security Team";
+
+  const configWithCustomStep = structuredClone(getDefaultWorkflowConfig());
+  const legalIndex = configWithCustomStep.steps.findIndex(
+    (step) => step.id === "legal",
+  );
+  configWithCustomStep.steps.splice(legalIndex + 1, 0, customStep);
+
+  await updateWorkflowConfig(configWithCustomStep, ORG_ID);
+
+  const newSubmission = createContractFromIntake(buildTestIntake("custom-step"), {
+    id: "workflow-custom-step-id",
+    recordNumber: "CR-WF-CUSTOM-001",
+  });
+  const customWorkflowStep = newSubmission.workflowSteps.find(
+    (step) => step.id === customStep.id,
+  );
+
+  assert(
+    "New submissions include admin-added approval steps",
+    Boolean(customWorkflowStep),
+    customWorkflowStep?.name ?? "missing custom step",
+  );
+
+  const reconciledWithCustomStep = reconcileContractWorkflowWithConfig(
+    draft,
+    ORG_ID,
+  );
+
+  assert(
+    "Existing non-active contracts gain admin-added approval steps",
+    reconciledWithCustomStep.workflowSteps.some(
+      (step) => step.id === customStep.id,
+    ),
+    reconciledWithCustomStep.workflowSteps.map((step) => step.id).join(", "),
+  );
+
+  await updateWorkflowConfig(getDefaultWorkflowConfig(), ORG_ID);
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
   runWorkflowUnitTests();
+  await runWorkflowSyncUnitTests();
   runRenewalWorkflowUnitTests();
   runWorkflowPolicyUnitTests();
   runContractSearchUnitTests();
