@@ -33,7 +33,7 @@ function isLinkActive(
   if (!queryString) {
     if (path === "/legal/dashboard") {
       const view = searchParams.get("view");
-      return !view || view === "pending";
+      return !view || view === "mine" || view === "pending";
     }
 
     if (path === "/admin/dashboard") {
@@ -51,9 +51,13 @@ function isLinkActive(
     }
   }
 
-  if (path === "/legal/dashboard" && expected.get("view") === "pending") {
+  if (path === "/legal/dashboard" && expected.get("view") === "mine") {
     const view = searchParams.get("view");
-    return view === "pending" || view === null;
+    return view === "mine" || view === "pending" || view === null;
+  }
+
+  if (path === "/legal/dashboard" && expected.get("view") === "unassigned") {
+    return searchParams.get("view") === "unassigned";
   }
 
   return true;
@@ -96,7 +100,7 @@ export function AppShell({ children }: AppShellProps) {
 
     const endpoint =
       tier === "legal"
-        ? "/api/legal/contracts?view=pending&pageSize=1"
+        ? "/api/legal/contracts?view=unassigned&pageSize=1"
         : "/api/contracts?assignedToMe=true";
 
     void fetch(endpoint, { cache: "no-store" })

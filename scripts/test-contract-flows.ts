@@ -250,6 +250,36 @@ function runWorkflowUnitTests(): void {
     `stage=${awaitingSignatureRecord.stage}`,
   );
 
+
+  assert(
+    "Unassigned view includes only pickup-ready legal review records",
+    filterContractRecords([draft, pickedUp], { view: "unassigned" }).length === 1 &&
+      filterContractRecords([draft, pickedUp], { view: "unassigned" })[0]?.id === draft.id,
+    "unassigned filter",
+  );
+
+  assert(
+    "My queue view includes only records owned by the legal user",
+    filterContractRecords([draft, pickedUp], {
+      view: "mine",
+      legalOwnerEmail: LEGAL_USER.email,
+    }).length === 1 &&
+      filterContractRecords([draft, pickedUp], {
+        view: "mine",
+        legalOwnerEmail: LEGAL_USER.email,
+      })[0]?.id === pickedUp.id,
+    "mine filter",
+  );
+
+  assert(
+    "My queue view excludes unassigned records",
+    filterContractRecords([draft], {
+      view: "mine",
+      legalOwnerEmail: LEGAL_USER.email,
+    }).length === 0,
+    "mine excludes unassigned",
+  );
+
   assert(
     "In-review contract excluded from signature view",
     filterContractRecords([pickedUp], { view: "signature" }).length === 0,

@@ -4,8 +4,10 @@ import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import {
   buildContractStatusCounts,
   countAwaitingSignatureContracts,
+  countMyPendingReviewContracts,
   countOverduePendingContracts,
   countPendingReviewContracts,
+  countUnassignedPendingReviewContracts,
   filterContractRecords,
   listMergedContractRecords,
   sortContractRecords,
@@ -14,7 +16,7 @@ import { reportError } from "@/lib/error-reporting";
 import { isAdminEmail, isLegalEmail } from "@/lib/legal-access";
 import type { ContractLifecycleStatus } from "@/types/contract";
 
-const VALID_VIEWS = new Set(["all", "pending", "signature"]);
+const VALID_VIEWS = new Set(["all", "pending", "mine", "unassigned", "signature"]);
 const VALID_SORT_BY = new Set([
   "createdAt",
   "updatedAt",
@@ -26,7 +28,12 @@ const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
 const OVERDUE_CALENDAR_DAYS = 7;
 
-type LegalContractsView = "all" | "pending" | "signature";
+type LegalContractsView =
+  | "all"
+  | "pending"
+  | "mine"
+  | "unassigned"
+  | "signature";
 type LegalContractsSortBy =
   | "createdAt"
   | "updatedAt"
@@ -133,6 +140,8 @@ export async function GET(request: NextRequest) {
       contractStatus: query.contractStatus,
       contractType: query.contractType,
       search: query.search,
+      legalOwnerEmail:
+        query.view === "mine" ? actorEmail : undefined,
     });
     const sortedContracts = sortContractRecords(
       filteredContracts,
@@ -149,6 +158,8 @@ export async function GET(request: NextRequest) {
       ...buildContractStatusCounts(allContracts),
       overdue: countOverduePendingContracts(allContracts, overdueCutoff),
       pendingReview: countPendingReviewContracts(allContracts),
+      myQueue: countMyPendingReviewContracts(allContracts, actorEmail),
+      unassignedQueue: countUnassignedPendingReviewContracts(allContracts),
       awaitingSignature: countAwaitingSignatureContracts(allContracts),
     };
 

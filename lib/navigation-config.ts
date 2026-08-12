@@ -77,8 +77,13 @@ export const NAVIGATION_BY_TIER: Record<UserTier, NavSection[]> = {
           icon: "files",
         },
         {
-          href: "/legal/dashboard?view=pending",
-          label: "Pending review",
+          href: "/legal/dashboard?view=mine",
+          label: "My queue",
+          icon: "users",
+        },
+        {
+          href: "/legal/dashboard?view=unassigned",
+          label: "Unassigned",
           icon: "clock",
         },
         {

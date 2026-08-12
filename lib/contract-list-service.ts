@@ -3,6 +3,11 @@ import {
   matchesContractSearchTerms,
   parseContractSearchTerms,
 } from "@/lib/contract-search-service";
+import {
+  isAwaitingLegalPickup,
+  isOwnedByLegalUser,
+  isPendingReviewContract,
+} from "@/lib/legal-assignment";
 import { canViewContractRecord } from "@/lib/contract-store";
 import {
   deriveContractStatus,
@@ -36,7 +41,8 @@ export type ContractListFilters = {
   requesterEmail?: string;
   search?: string;
   contractStatus?: ContractLifecycleStatus;
-  view?: "all" | "pending" | "signature";
+  view?: "all" | "pending" | "mine" | "unassigned" | "signature";
+  legalOwnerEmail?: string;
 };
 
 function resolveOrganizationIds(organizationId: string): string[] {
@@ -73,12 +79,27 @@ export function filterContractRecords(
     const contractStatus =
       contract.contractStatus ?? deriveContractStatus(contract.stage);
 
-    if (filters.view === "pending") {
-      if (contractStatus !== "draft" && contractStatus !== "pending") {
+    if (
+      filters.view === "pending" ||
+      filters.view === "mine" ||
+      filters.view === "unassigned"
+    ) {
+      if (!isPendingReviewContract(contract)) {
         return false;
       }
+    }
 
-      if (contract.stage === "awaiting_signature") {
+    if (filters.view === "mine") {
+      if (
+        !filters.legalOwnerEmail ||
+        !isOwnedByLegalUser(contract, filters.legalOwnerEmail)
+      ) {
+        return false;
+      }
+    }
+
+    if (filters.view === "unassigned") {
+      if (!isAwaitingLegalPickup(contract)) {
         return false;
       }
     }
@@ -317,15 +338,24 @@ export function countAwaitingSignatureContracts(
 export function countPendingReviewContracts(
   contracts: ContractRecord[],
 ): number {
-  return contracts.filter((contract) => {
-    const status =
-      contract.contractStatus ?? deriveContractStatus(contract.stage);
+  return contracts.filter(isPendingReviewContract).length;
+}
 
-    return (
-      (status === "draft" || status === "pending") &&
-      contract.stage !== "awaiting_signature"
-    );
-  }).length;
+export function countMyPendingReviewContracts(
+  contracts: ContractRecord[],
+  legalOwnerEmail: string,
+): number {
+  return contracts.filter(
+    (contract) =>
+      isPendingReviewContract(contract) &&
+      isOwnedByLegalUser(contract, legalOwnerEmail),
+  ).length;
+}
+
+export function countUnassignedPendingReviewContracts(
+  contracts: ContractRecord[],
+): number {
+  return contracts.filter(isAwaitingLegalPickup).length;
 }
 
 export function countOverduePendingContracts(

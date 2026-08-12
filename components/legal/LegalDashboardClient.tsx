@@ -6,22 +6,24 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { ApprovalReassignDialog } from "@/components/contracts/ApprovalReassignDialog";
 import { IntakeSettingsClient } from "@/components/legal/IntakeSettingsClient";
+import { PendingReviewQueuePanel } from "@/components/legal/PendingReviewQueuePanel";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
 import { StageBadge } from "@/components/contracts/StageBadge";
 import { dedupeContractRecordsById } from "@/lib/dedupe-contract-records";
 import {
-  getLegalOwnerDisplay,
   isAwaitingLegalPickup,
+  isOwnedByLegalUser,
+  isPendingReviewContract,
 } from "@/lib/legal-assignment";
-import { getCurrentApprover, isAwaitingApproval } from "@/lib/workflow-engine";
 import type { ContractLifecycleStatus, ContractRecord } from "@/types/contract";
 
 interface LegalDashboardClientProps {
   initialTab?: DashboardTab;
   explicitView?: boolean;
+  userEmail: string;
 }
 
-type DashboardTab = "pending" | "all" | "intake" | "signature";
+type DashboardTab = "mine" | "unassigned" | "all" | "intake" | "signature";
 
 type ApprovalAction = "approve" | "reject";
 
@@ -44,6 +46,8 @@ interface LegalContractsCounts {
   total: number;
   overdue: number;
   pendingReview?: number;
+  myQueue?: number;
+  unassignedQueue?: number;
   awaitingSignature?: number;
 }
 
@@ -195,7 +199,7 @@ function TableSkeleton() {
 }
 
 function buildLegalContractsUrl(
-  view: "all" | "pending" | "signature",
+  view: "all" | "mine" | "unassigned" | "signature",
   options?: {
     contractStatus?: string;
     contractType?: string;
@@ -277,13 +281,15 @@ async function fetchLegalContracts(
 }
 
 export function LegalDashboardClient({
-  initialTab = "pending",
+  initialTab = "mine",
   explicitView = false,
+  userEmail,
 }: LegalDashboardClientProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
   const [counts, setCounts] = useState<LegalContractsCounts | null>(null);
-  const [pendingContracts, setPendingContracts] = useState<ContractRecord[]>(
+  const [myContracts, setMyContracts] = useState<ContractRecord[]>([]);
+  const [unassignedContracts, setUnassignedContracts] = useState<ContractRecord[]>(
     [],
   );
   const [signatureContracts, setSignatureContracts] = useState<ContractRecord[]>(
@@ -299,7 +305,8 @@ export function LegalDashboardClient({
   );
   const [contractTypeOptions, setContractTypeOptions] = useState<string[]>([]);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
-  const [loadingPending, setLoadingPending] = useState(true);
+  const [loadingMyQueue, setLoadingMyQueue] = useState(true);
+  const [loadingUnassigned, setLoadingUnassigned] = useState(true);
   const [loadingSignature, setLoadingSignature] = useState(true);
   const [loadingDatabase, setLoadingDatabase] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -329,7 +336,9 @@ export function LegalDashboardClient({
           ? "intake"
           : initialTab === "signature"
             ? "signature"
-            : "pending";
+            : initialTab === "unassigned"
+              ? "unassigned"
+              : "mine";
     router.replace(`/legal/dashboard?view=${defaultView}`, { scroll: false });
   }, [explicitView, initialTab, router]);
 
@@ -342,7 +351,9 @@ export function LegalDashboardClient({
           ? "/legal/dashboard?view=intake"
           : tab === "signature"
             ? "/legal/dashboard?view=signature"
-            : "/legal/dashboard?view=pending";
+            : tab === "unassigned"
+              ? "/legal/dashboard?view=unassigned"
+              : "/legal/dashboard?view=mine";
     router.replace(nextUrl, { scroll: false });
   }
 
@@ -351,9 +362,14 @@ export function LegalDashboardClient({
     [signatureContracts],
   );
 
-  const pendingReview = useMemo(
-    () => sortPendingQueue(pendingContracts),
-    [pendingContracts],
+  const myQueue = useMemo(
+    () => sortPendingQueue(myContracts),
+    [myContracts],
+  );
+
+  const unassignedQueue = useMemo(
+    () => sortPendingQueue(unassignedContracts),
+    [unassignedContracts],
   );
 
   const loadMetrics = useCallback(async () => {
@@ -366,8 +382,8 @@ export function LegalDashboardClient({
       if (
         !explicitView &&
         data.counts.total > 0 &&
-        (data.counts.pendingReview ??
-          data.counts.draft + data.counts.pending) === 0 &&
+        (data.counts.myQueue ?? 0) === 0 &&
+        (data.counts.unassignedQueue ?? 0) === 0 &&
         (data.counts.awaitingSignature ?? 0) === 0
       ) {
         setActiveTab("all");
@@ -384,28 +400,53 @@ export function LegalDashboardClient({
     }
   }, [explicitView, router]);
 
-  const loadPending = useCallback(async (showLoading = false) => {
+  const loadMyQueue = useCallback(async (showLoading = false) => {
     if (showLoading) {
-      setLoadingPending(true);
+      setLoadingMyQueue(true);
     }
 
     try {
       const data = await fetchLegalContracts(
-        buildLegalContractsUrl("pending", {
+        buildLegalContractsUrl("mine", {
           pageSize: 100,
           sortBy: "createdAt",
           sortOrder: "desc",
         }),
       );
-      setPendingContracts(dedupeContractRecordsById(data.contracts));
+      setMyContracts(dedupeContractRecordsById(data.contracts));
     } catch (loadError) {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : "Failed to load pending review queue",
+          : "Failed to load your queue",
       );
     } finally {
-      setLoadingPending(false);
+      setLoadingMyQueue(false);
+    }
+  }, []);
+
+  const loadUnassigned = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      setLoadingUnassigned(true);
+    }
+
+    try {
+      const data = await fetchLegalContracts(
+        buildLegalContractsUrl("unassigned", {
+          pageSize: 100,
+          sortBy: "createdAt",
+          sortOrder: "desc",
+        }),
+      );
+      setUnassignedContracts(dedupeContractRecordsById(data.contracts));
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load unassigned queue",
+      );
+    } finally {
+      setLoadingUnassigned(false);
     }
   }, []);
 
@@ -483,19 +524,21 @@ export function LegalDashboardClient({
       setError(null);
       await Promise.all([
         loadMetrics(),
-        loadPending(false),
+        loadMyQueue(false),
+        loadUnassigned(false),
         loadSignature(false),
         loadDatabase(filters, false),
       ]);
     },
-    [loadDatabase, loadMetrics, loadPending, loadSignature],
+    [loadDatabase, loadMetrics, loadMyQueue, loadUnassigned, loadSignature],
   );
 
   useDeferredEffect(() => {
     void loadMetrics();
-    void loadPending(true);
+    void loadMyQueue(true);
+    void loadUnassigned(true);
     void loadSignature(true);
-  }, [loadMetrics, loadPending, loadSignature]);
+  }, [loadMetrics, loadMyQueue, loadUnassigned, loadSignature]);
 
   useDeferredEffect(() => {
     if (activeTab !== "all") {
@@ -508,7 +551,8 @@ export function LegalDashboardClient({
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       void loadMetrics();
-      void loadPending(false);
+      void loadMyQueue(false);
+      void loadUnassigned(false);
       void loadSignature(false);
 
       if (activeTab === "all") {
@@ -519,7 +563,7 @@ export function LegalDashboardClient({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeTab, databaseFilters, loadDatabase, loadMetrics, loadPending, loadSignature]);
+  }, [activeTab, databaseFilters, loadDatabase, loadMetrics, loadMyQueue, loadUnassigned, loadSignature]);
 
   function openReassignModal(contract: ContractRecord): void {
     setReassignModal({ contract });
@@ -530,13 +574,27 @@ export function LegalDashboardClient({
   }
 
   async function handleReassigned(updated: ContractRecord): Promise<void> {
-    setPendingContracts((current) =>
-      dedupeContractRecordsById(
-        current.map((contract) =>
-          contract.id === updated.id ? updated : contract,
-        ),
-      ),
-    );
+    setMyContracts((current) => {
+      const remaining = current.filter((contract) => contract.id !== updated.id);
+
+      if (
+        isPendingReviewContract(updated) &&
+        isOwnedByLegalUser(updated, userEmail)
+      ) {
+        return dedupeContractRecordsById([...remaining, updated]);
+      }
+
+      return dedupeContractRecordsById(remaining);
+    });
+    setUnassignedContracts((current) => {
+      const remaining = current.filter((contract) => contract.id !== updated.id);
+
+      if (isAwaitingLegalPickup(updated)) {
+        return dedupeContractRecordsById([...remaining, updated]);
+      }
+
+      return dedupeContractRecordsById(remaining);
+    });
     await refreshDashboard(databaseFilters);
   }
 
@@ -645,17 +703,11 @@ export function LegalDashboardClient({
     setDatabaseFilters(DEFAULT_DATABASE_FILTERS);
   }
 
+  const myQueueCount = counts?.myQueue ?? 0;
+  const unassignedQueueCount = counts?.unassignedQueue ?? 0;
   const pendingReviewCount =
     counts?.pendingReview ??
-    (counts == null
-      ? 0
-      : Math.max(
-          0,
-          counts.draft +
-            counts.pending -
-            (counts.awaitingSignature ?? 0),
-        ));
-
+    myQueueCount + unassignedQueueCount;
   const awaitingSignatureCount = counts?.awaitingSignature ?? 0;
 
   return (
@@ -735,14 +787,35 @@ export function LegalDashboardClient({
         <nav className="flex">
           <button
             type="button"
-            onClick={() => switchTab("pending")}
+            onClick={() => switchTab("mine")}
             className={`px-5 py-3 text-sm transition-colors ${
-              activeTab === "pending"
+              activeTab === "mine"
                 ? "border-b-2 border-[#3558A0] font-medium text-[#3558A0]"
                 : "border-b-2 border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
-            Pending review
+            My queue
+            {myQueueCount > 0 ? (
+              <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                {myQueueCount}
+              </span>
+            ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => switchTab("unassigned")}
+            className={`px-5 py-3 text-sm transition-colors ${
+              activeTab === "unassigned"
+                ? "border-b-2 border-[#3558A0] font-medium text-[#3558A0]"
+                : "border-b-2 border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Unassigned
+            {unassignedQueueCount > 0 ? (
+              <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                {unassignedQueueCount}
+              </span>
+            ) : null}
           </button>
           <button
             type="button"
@@ -788,174 +861,41 @@ export function LegalDashboardClient({
 
       {activeTab === "intake" ? <IntakeSettingsClient /> : null}
 
-      {activeTab === "pending" ? (
-        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Pending review queue
-            </h2>
-            <p className="text-sm text-slate-600">
-              Newest submissions first. Unassigned records stay in the queue until
-              a legal user picks them up.
-            </p>
-          </div>
+      {activeTab === "mine" ? (
+        <PendingReviewQueuePanel
+          title="My queue"
+          description={`Contracts assigned to you that are still in review.`}
+          emptyMessage="No contracts are currently assigned to you."
+          contracts={myQueue}
+          loading={loadingMyQueue}
+          loadingSkeleton={<TableSkeleton />}
+          actorEmail={userEmail}
+          pickupPendingId={pickupPendingId}
+          actionPendingId={actionPendingId}
+          onPickup={(contractId) => void handlePickup(contractId)}
+          onReassign={openReassignModal}
+          onApprove={(contract) => openApprovalModal(contract, "approve")}
+          onReject={(contract) => openApprovalModal(contract, "reject")}
+        />
+      ) : null}
 
-          {loadingPending ? (
-            <TableSkeleton />
-          ) : pendingReview.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
-              No contracts are currently pending review.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {pendingReview.map((contract) => {
-                const daysInStage = businessDaysSince(contract.updatedAt);
-                const isStale = daysInStage > 5;
-                const currentApprover = getCurrentApprover(contract);
-                const legalOwner = getLegalOwnerDisplay(contract);
-                const awaitingPickup = isAwaitingLegalPickup(contract);
-                const canReassign =
-                  isAwaitingApproval(contract) &&
-                  currentApprover &&
-                  !awaitingPickup;
-
-                return (
-                  <li
-                    key={contract.id}
-                    className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm"
-                  >
-                    <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={`/contracts/${contract.id}`}
-                            className="font-medium text-indigo-700 hover:underline"
-                          >
-                            {contract.recordNumber}
-                          </Link>
-                          <StageBadge stage={contract.stage} />
-                          {legalOwner.unassigned ? (
-                            <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
-                              Unassigned
-                            </span>
-                          ) : null}
-                          <span
-                            className={`text-xs font-medium ${
-                              isStale ? "text-rose-700" : "text-slate-500"
-                            }`}
-                          >
-                            {daysInStage} day{daysInStage === 1 ? "" : "s"} in stage
-                          </span>
-                        </div>
-
-                        <p className="mt-2 line-clamp-2 text-sm font-medium text-slate-900">
-                          {contract.title}
-                        </p>
-
-                        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-                          <div className="min-w-0">
-                            <dt className="font-medium uppercase tracking-wide text-slate-500">
-                              Submitted
-                            </dt>
-                            <dd className="mt-0.5 text-slate-700">
-                              {contract.createdAt.slice(0, 10)}
-                            </dd>
-                          </div>
-                          <div className="min-w-0">
-                            <dt className="font-medium uppercase tracking-wide text-slate-500">
-                              Requester
-                            </dt>
-                            <dd className="mt-0.5 truncate text-slate-700">
-                              {contract.requesterName}
-                            </dd>
-                          </div>
-                          <div className="min-w-0">
-                            <dt className="font-medium uppercase tracking-wide text-slate-500">
-                              Type
-                            </dt>
-                            <dd className="mt-0.5 truncate text-slate-700">
-                              {contract.contractType}
-                            </dd>
-                          </div>
-                          <div className="min-w-0">
-                            <dt className="font-medium uppercase tracking-wide text-slate-500">
-                              Amount
-                            </dt>
-                            <dd className="mt-0.5 text-slate-700">
-                              {contract.amount || "—"}
-                            </dd>
-                          </div>
-                          <div className="min-w-0 sm:col-span-2">
-                            <dt className="font-medium uppercase tracking-wide text-slate-500">
-                              Legal owner
-                            </dt>
-                            <dd className="mt-0.5 text-slate-700">
-                              {legalOwner.unassigned
-                                ? "Awaiting pickup"
-                                : legalOwner.label}
-                            </dd>
-                          </div>
-                        </dl>
-                      </div>
-
-                      <div className="flex shrink-0 flex-wrap gap-2 xl:max-w-md xl:justify-end">
-                        <Link
-                          href={`/contracts/${contract.id}`}
-                          className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          View
-                        </Link>
-                        {awaitingPickup ? (
-                          <button
-                            type="button"
-                            disabled={
-                              pickupPendingId === contract.id ||
-                              actionPendingId === contract.id
-                            }
-                            onClick={() => void handlePickup(contract.id)}
-                            className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
-                          >
-                            {pickupPendingId === contract.id
-                              ? "Picking up..."
-                              : "Pick up"}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={actionPendingId === contract.id || !canReassign}
-                          onClick={() => openReassignModal(contract)}
-                          className="rounded-md border border-indigo-200 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-60"
-                        >
-                          Re-route
-                        </button>
-                        <button
-                          type="button"
-                          disabled={
-                            actionPendingId === contract.id || awaitingPickup
-                          }
-                          onClick={() => openApprovalModal(contract, "approve")}
-                          className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          disabled={
-                            actionPendingId === contract.id || awaitingPickup
-                          }
-                          onClick={() => openApprovalModal(contract, "reject")}
-                          className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+      {activeTab === "unassigned" ? (
+        <PendingReviewQueuePanel
+          title="Unassigned queue"
+          description="Records at legal review that still need to be picked up by a legal user."
+          emptyMessage="No unassigned contracts are waiting for pickup."
+          contracts={unassignedQueue}
+          loading={loadingUnassigned}
+          loadingSkeleton={<TableSkeleton />}
+          actorEmail={userEmail}
+          showPickupActions
+          pickupPendingId={pickupPendingId}
+          actionPendingId={actionPendingId}
+          onPickup={(contractId) => void handlePickup(contractId)}
+          onReassign={openReassignModal}
+          onApprove={(contract) => openApprovalModal(contract, "approve")}
+          onReject={(contract) => openApprovalModal(contract, "reject")}
+        />
       ) : null}
 
       {activeTab === "signature" ? (

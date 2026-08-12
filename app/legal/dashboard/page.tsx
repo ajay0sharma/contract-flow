@@ -20,19 +20,26 @@ export default async function LegalDashboardPage({
   }
 
   const params = await searchParams;
+
+  if (params.view === "pending") {
+    redirect("/legal/dashboard?view=mine");
+  }
   const explicitView =
     params.view === "all" ||
-    params.view === "pending" ||
+    params.view === "mine" ||
+    params.view === "unassigned" ||
     params.view === "intake" ||
     params.view === "signature";
-  const initialTab: "pending" | "all" | "intake" | "signature" =
+  const initialTab: "mine" | "unassigned" | "all" | "intake" | "signature" =
     params.view === "all"
       ? "all"
       : params.view === "intake"
         ? "intake"
         : params.view === "signature"
           ? "signature"
-          : "pending";
+          : params.view === "unassigned"
+            ? "unassigned"
+            : "mine";
   const displayName = getUserDisplayName(user);
 
   return (
@@ -40,6 +47,7 @@ export default async function LegalDashboardPage({
       <LegalDashboardClient
         initialTab={initialTab}
         explicitView={explicitView}
+        userEmail={email}
       />
     </LegalShell>
   );
