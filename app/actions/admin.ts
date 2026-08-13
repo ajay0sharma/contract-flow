@@ -65,6 +65,7 @@ export async function saveWorkflowConfigAction(
   revalidatePath("/settings/workflow");
   revalidatePath("/legal/dashboard");
   revalidatePath("/dashboard");
+  revalidatePath("/contracts", "layout");
 }
 
 export async function saveWorkflowPolicyAction(

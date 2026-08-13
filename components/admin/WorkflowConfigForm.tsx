@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { saveWorkflowConfigAction } from "@/app/actions/admin";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
+import { getCompanyConfig } from "@/lib/company-config";
 import type {
   ContractTypeWorkflowRule,
   WorkflowConfig,
@@ -45,6 +46,7 @@ export function WorkflowConfigForm({
         .sort((left, right) => left.label.localeCompare(right.label)),
     [contractTypes],
   );
+  const organizationName = getCompanyConfig(organizationId).name;
 
   function updateRuleThreshold(ruleId: string, threshold: number) {
     setConfig((current) => ({
@@ -274,7 +276,9 @@ export function WorkflowConfigForm({
     startTransition(async () => {
       try {
         await saveWorkflowConfigAction(config, organizationId);
-        setMessage("Workflow settings saved.");
+        setMessage(
+          `Workflow settings saved for ${organizationName}. Contract records submitted under this company profile will use this approval chain.`,
+        );
       } catch (submitError) {
         setError(
           submitError instanceof Error
@@ -287,6 +291,15 @@ export function WorkflowConfigForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <p className="font-medium">Editing workflow for {organizationName}</p>
+        <p className="mt-1">
+          Approval chains are configured per company profile. Intake submissions
+          use the workflow for the company profile selected on the request form.
+          Switch client organization in the admin header before saving if you
+          need to update another profile&apos;s workflow.
+        </p>
+      </div>
       <section className="rounded-lg border border-stone-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-stone-900">General</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">

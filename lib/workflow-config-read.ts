@@ -7,6 +7,7 @@ import {
   cloneAndNormalizeWorkflowConfig,
   getDefaultWorkflowConfig,
 } from "@/lib/workflow-store-defaults";
+import { resolveWorkflowOrganizationId } from "@/lib/workflow-organization";
 import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 
 const globalStore = globalThis as typeof globalThis & {
@@ -35,11 +36,13 @@ function getMemoryStore(organizationId: string): WorkflowConfig {
 export function getWorkflowConfig(
   organizationId = DEFAULT_ORGANIZATION_ID,
 ): WorkflowConfig {
+  const resolvedOrganizationId = resolveWorkflowOrganizationId(organizationId);
+
   if (allowMemoryPersistence()) {
-    return getMemoryStore(organizationId);
+    return getMemoryStore(resolvedOrganizationId);
   }
 
-  const cached = getCachedWorkflowConfig(organizationId);
+  const cached = getCachedWorkflowConfig(resolvedOrganizationId);
   if (cached) {
     return cloneAndNormalizeWorkflowConfig(cached);
   }

@@ -72,6 +72,7 @@ import {
 } from "@/lib/workflow-contract-reconcile";
 import { getDefaultWorkflowConfig } from "@/lib/workflow-store-defaults";
 import { createCustomWorkflowStep } from "@/lib/workflow-config-types";
+import { resolveWorkflowOrganizationId } from "@/lib/workflow-organization";
 import { updateWorkflowConfig } from "@/lib/workflow-store";
 import { mergeDocxPlaceholders } from "@/lib/contract-template-docx";
 import JSZip from "jszip";
@@ -1101,6 +1102,12 @@ async function runWorkflowSyncUnitTests(): Promise<void> {
     "Rejected contracts skip workflow sync",
     !shouldSyncContractWorkflow({ ...draft, stage: "rejected" }),
     "rejected",
+  );
+
+  assert(
+    "Legacy workflow org ids resolve to default",
+    resolveWorkflowOrganizationId("seed-org-001") === ORG_ID,
+    resolveWorkflowOrganizationId("seed-org-001"),
   );
 
   const pickedUp = assignLegalReviewerStep(

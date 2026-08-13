@@ -1368,7 +1368,9 @@ export async function syncNonActiveContractWorkflowsInMemory(
 
     const reconciled = reconcileContractWorkflowWithConfig(
       contract,
-      contract.companyProfileId,
+      (await import("@/lib/workflow-organization")).resolveWorkflowOrganizationId(
+        contract.companyProfileId,
+      ),
     );
 
     if (!contractWorkflowNeedsSync(contract, reconciled)) {

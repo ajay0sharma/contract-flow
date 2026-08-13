@@ -5,17 +5,20 @@ import {
   cloneAndNormalizeWorkflowConfig,
   getDefaultWorkflowConfig,
 } from "@/lib/workflow-store-defaults";
+import { resolveWorkflowOrganizationId } from "@/lib/workflow-organization";
 import { DEFAULT_ORGANIZATION_ID } from "@/types/clause-library";
 import { getWorkflowConfig } from "@/lib/workflow-config-read";
 
 export async function ensureWorkflowConfigLoaded(
   organizationId = DEFAULT_ORGANIZATION_ID,
 ): Promise<WorkflowConfig> {
+  const resolvedOrganizationId = resolveWorkflowOrganizationId(organizationId);
+
   if (allowMemoryPersistence()) {
-    return getWorkflowConfig(organizationId);
+    return getWorkflowConfig(resolvedOrganizationId);
   }
 
-  const cached = getCachedWorkflowConfig(organizationId);
+  const cached = getCachedWorkflowConfig(resolvedOrganizationId);
   if (cached) {
     return cloneAndNormalizeWorkflowConfig(cached);
   }
@@ -23,7 +26,7 @@ export async function ensureWorkflowConfigLoaded(
   const { loadWorkflowSettingsFromDatabase } = await import(
     "@/lib/platform-data-db"
   );
-  const settings = await loadWorkflowSettingsFromDatabase(organizationId);
+  const settings = await loadWorkflowSettingsFromDatabase(resolvedOrganizationId);
   return settings.config;
 }
 

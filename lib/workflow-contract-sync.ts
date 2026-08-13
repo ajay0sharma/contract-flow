@@ -5,6 +5,7 @@ import {
 import { getPrismaClient } from "@/lib/prisma";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import type { ContractRecord } from "@/types/contract";
+import { resolveWorkflowOrganizationId } from "@/lib/workflow-organization";
 import {
   contractWorkflowNeedsSync,
   reconcileContractWorkflowWithConfig,
@@ -39,7 +40,9 @@ export async function ensureContractWorkflowCurrent(
   contract: ContractRecord,
   organizationId: string,
 ): Promise<ContractRecord> {
-  const workflowOrganizationId = contract.companyProfileId || organizationId;
+  const workflowOrganizationId = resolveWorkflowOrganizationId(
+    contract.companyProfileId || organizationId,
+  );
   const { ensureWorkflowConfigLoaded } = await import(
     "@/lib/workflow-config-server"
   );
@@ -65,23 +68,24 @@ export async function ensureContractWorkflowCurrent(
 export async function syncNonActiveContractWorkflows(
   organizationId: string,
 ): Promise<number> {
+  const resolvedOrganizationId = resolveWorkflowOrganizationId(organizationId);
   const { ensureWorkflowConfigLoaded } = await import(
     "@/lib/workflow-config-server"
   );
-  await ensureWorkflowConfigLoaded(organizationId);
+  await ensureWorkflowConfigLoaded(resolvedOrganizationId);
 
   if (allowMemoryPersistence()) {
     const { syncNonActiveContractWorkflowsInMemory } = await import(
       "@/lib/contract-store"
     );
-    return await syncNonActiveContractWorkflowsInMemory(organizationId);
+    return await syncNonActiveContractWorkflowsInMemory(resolvedOrganizationId);
   }
 
   const prisma = getPrismaClient();
   const records = await prisma.contract.findMany({
     where: {
       organizationId: {
-        in: resolveOrganizationIds(organizationId),
+        in: resolveOrganizationIds(resolvedOrganizationId),
       },
       stage: {
         in: [
@@ -110,7 +114,9 @@ export async function syncNonActiveContractWorkflows(
 
     const reconciled = reconcileContractWorkflowWithConfig(
       contract,
-      contract.companyProfileId || record.organizationId,
+      resolveWorkflowOrganizationId(
+        contract.companyProfileId || record.organizationId,
+      ),
     );
 
     if (!contractWorkflowNeedsSync(contract, reconciled)) {

@@ -2,6 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import {
   loadContractRecord,
   mapPrismaContractToRecord,
@@ -39,7 +40,9 @@ export async function GET(
   const { id } = await context.params;
 
   try {
-    const organizationId = resolveClauseLibraryOrganizationId();
+    const organizationId =
+      (await resolveContractOrganizationId(id)) ??
+      resolveClauseLibraryOrganizationId();
     const record = await loadSyncedContractRecord(id, organizationId);
 
     if (!record) {
