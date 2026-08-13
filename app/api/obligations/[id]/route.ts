@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ObligationStatus } from "@/lib/generated/prisma/enums";
 import { requireLegalOrAdminApiActor } from "@/lib/api-privileged-auth";
 import { writeAuditLog } from "@/lib/audit-log";
-import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { reportError } from "@/lib/error-reporting";
 import { getPrismaClient } from "@/lib/prisma";
 
@@ -17,7 +16,6 @@ export async function PATCH(
   }
 
   const { id } = await context.params;
-  const organizationId = resolveClauseLibraryOrganizationId();
 
   try {
     const body = (await request.json()) as { status?: ObligationStatus };
@@ -30,8 +28,8 @@ export async function PATCH(
     }
 
     const prisma = getPrismaClient();
-    const existing = await prisma.obligation.findFirst({
-      where: { id, organizationId },
+    const existing = await prisma.obligation.findUnique({
+      where: { id },
     });
 
     if (!existing) {
@@ -49,7 +47,7 @@ export async function PATCH(
         : updated.description;
 
     await writeAuditLog({
-      organizationId,
+      organizationId: existing.organizationId,
       entityType: "contract",
       entityId: updated.contractId,
       action: "obligation_status_updated",

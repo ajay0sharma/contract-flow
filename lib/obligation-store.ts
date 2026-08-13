@@ -1,8 +1,5 @@
-import { saveContractRecord } from "@/lib/contract-persistence";
 import { getPrismaClient, isDatabaseConfigured } from "@/lib/prisma";
-import { Prisma } from "@/lib/generated/prisma/client";
-import { scanCompanyObligations } from "@/lib/obligation-scanner";
-import { findFullyExecutedAgreement } from "@/lib/obligation-documents";
+import { runObligationScanForContract } from "@/lib/obligation-scan-service";
 import { resolveContractRecordNumber } from "@/lib/record-id";
 import type {
   ContractObligationView,
@@ -10,7 +7,7 @@ import type {
   ScannedObligationItem,
 } from "@/types/obligations";
 import type { ContractRecord } from "@/types/contract";
-import type { ObligationScanStatus, ObligationType } from "@/lib/generated/prisma/enums";
+import type { ObligationScanStatus } from "@/lib/generated/prisma/enums";
 
 function emptyObligationView(contractId: string): ContractObligationView {
   return {
@@ -99,9 +96,18 @@ export async function getContractObligationView(
       contractId,
       scanStatus: record.obligationScanStatus,
       scanCompletedAt: toIsoString(record.obligationScanCompletedAt),
+      scanVersion: record.obligationScanVersion,
       summary: record.obligationSummary,
       obligations,
-      sourceAttachmentName: null,
+      sourceAttachmentName: record.executedDocumentName,
+      executedDocument: record.executedDocumentPath
+        ? {
+            name: record.executedDocumentName,
+            size: record.executedDocumentSize,
+            uploadedAt: toIsoString(record.executedUploadedAt),
+            uploadedById: record.executedUploadedById,
+          }
+        : null,
     };
   } catch (error) {
     console.error("Failed to load contract obligation view:", error);
@@ -219,7 +225,7 @@ export async function getObligationReportEntries(
 
 export async function runObligationScan(
   contract: ContractRecord,
-  _actor: { email: string; name: string },
+  actor: { email: string; name: string },
 ): Promise<ContractObligationView> {
   if (!isDatabaseConfigured()) {
     throw new Error(
@@ -227,84 +233,12 @@ export async function runObligationScan(
     );
   }
 
-  const attachment = findFullyExecutedAgreement(contract.attachments);
-
-  if (!attachment) {
-    throw new Error(
-      "Upload a fully executed agreement before running the obligation scan.",
-    );
-  }
-
-  const prisma = getPrismaClient();
-
-  await saveContractRecord(contract);
-  await prisma.contract.update({
-    where: { id: contract.id },
-    data: {
-      obligationScanStatus: "scanning",
-      obligationScanCompletedAt: null,
-    },
+  await runObligationScanForContract({
+    contractId: contract.id,
+    organizationId: contract.companyProfileId,
+    actorEmail: actor.email,
+    actorName: actor.name,
   });
 
-  try {
-    const scanResult = await scanCompanyObligations(contract, attachment);
-
-    await prisma.$transaction(async (tx) => {
-      await tx.obligation.deleteMany({
-        where: { contractId: contract.id },
-      });
-
-      await tx.contract.update({
-        where: { id: contract.id },
-        data: {
-          organizationId: contract.companyProfileId,
-          obligationScanStatus: "completed",
-          obligationScanCompletedAt: new Date(),
-          obligations: JSON.parse(
-            JSON.stringify(scanResult.obligations),
-          ) as Prisma.InputJsonValue,
-          obligationSummary: scanResult.summary,
-        },
-      });
-
-      if (scanResult.obligations.length > 0) {
-        await tx.obligation.createMany({
-          data: scanResult.obligations.map((item) => ({
-            contractId: contract.id,
-            organizationId: contract.companyProfileId,
-            description: item.description,
-            obligationType: item.obligationType as ObligationType,
-            dueDate: item.dueDate ? new Date(item.dueDate) : null,
-            isRecurring: item.isRecurring,
-            frequency: item.frequency ?? null,
-            counterpartyName: contract.companyName,
-          })),
-        });
-      }
-    });
-
-    return {
-      contractId: contract.id,
-      scanStatus: "completed",
-      scanCompletedAt: new Date().toISOString(),
-      summary: scanResult.summary,
-      obligations: scanResult.obligations,
-      sourceAttachmentName: attachment.fileName,
-    };
-  } catch (error) {
-    try {
-      await prisma.contract.update({
-        where: { id: contract.id },
-        data: {
-          obligationScanStatus: "failed",
-        },
-      });
-    } catch (updateError) {
-      console.error("Failed to mark obligation scan as failed:", updateError);
-    }
-
-    throw error instanceof Error
-      ? error
-      : new Error("Obligation scan failed.");
-  }
+  return getContractObligationView(contract.id);
 }

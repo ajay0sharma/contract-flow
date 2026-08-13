@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireLegalOrAdminApiActor } from "@/lib/api-privileged-auth";
+import { requireLegalApiActor } from "@/lib/api-legal-auth";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { reportError } from "@/lib/error-reporting";
 import { runObligationScanForContract } from "@/lib/obligation-scan-service";
@@ -9,21 +10,18 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireLegalOrAdminApiActor();
+  const auth = await requireLegalApiActor({
+    forbiddenMessage: "Only legal users can run obligation scans.",
+  });
 
   if ("response" in auth) {
-    if (auth.response.status === 403) {
-      return NextResponse.json(
-        { error: "Only legal users can run obligation scans" },
-        { status: 403 },
-      );
-    }
-
     return auth.response;
   }
 
   const { id } = await context.params;
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const organizationId =
+    (await resolveContractOrganizationId(id)) ??
+    resolveClauseLibraryOrganizationId();
 
   try {
     const prisma = getPrismaClient();

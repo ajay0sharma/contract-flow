@@ -6,10 +6,12 @@ import { getUserDisplayName } from "@/lib/user-display-name";
 export interface LegalApiActor {
   email: string;
   name: string;
+  userId: string;
 }
 
-export async function requireLegalApiActor():
-  Promise<{ actor: LegalApiActor } | { response: NextResponse }> {
+export async function requireLegalApiActor(options?: {
+  forbiddenMessage?: string;
+}): Promise<{ actor: LegalApiActor } | { response: NextResponse }> {
   const user = await currentUser();
 
   if (!user) {
@@ -23,7 +25,11 @@ export async function requireLegalApiActor():
   if (!isLegalEmail(email)) {
     return {
       response: NextResponse.json(
-        { error: "Only legal users can access the clause library." },
+        {
+          error:
+            options?.forbiddenMessage ??
+            "Only legal users can access the clause library.",
+        },
         { status: 403 },
       ),
     };
@@ -33,6 +39,7 @@ export async function requireLegalApiActor():
     actor: {
       email,
       name: getUserDisplayName(user),
+      userId: user.id,
     },
   };
 }

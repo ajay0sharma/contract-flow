@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireLegalOrAdminApiActor } from "@/lib/api-privileged-auth";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { reportError } from "@/lib/error-reporting";
 import { getPrismaClient } from "@/lib/prisma";
@@ -15,7 +16,9 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const organizationId =
+    (await resolveContractOrganizationId(id)) ??
+    resolveClauseLibraryOrganizationId();
 
   try {
     const prisma = getPrismaClient();

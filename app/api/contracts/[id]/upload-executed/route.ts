@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireLegalOrAdminApiActor } from "@/lib/api-privileged-auth";
+import { requireLegalApiActor } from "@/lib/api-legal-auth";
 import { writeAuditLog } from "@/lib/audit-log";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { reportError } from "@/lib/error-reporting";
 import {
@@ -17,14 +18,19 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireLegalOrAdminApiActor();
+  const auth = await requireLegalApiActor({
+    forbiddenMessage:
+      "Only legal users can upload the fully executed agreement for obligation scanning.",
+  });
 
   if ("response" in auth) {
     return auth.response;
   }
 
   const { id } = await context.params;
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const organizationId =
+    (await resolveContractOrganizationId(id)) ??
+    resolveClauseLibraryOrganizationId();
 
   try {
     const prisma = getPrismaClient();
@@ -66,28 +72,35 @@ export async function POST(
     );
 
     const uploadedAt = new Date();
-    const updated = await prisma.contract.update({
-      where: { id: contract.id },
-      data: {
-        executedDocumentPath: storagePath,
-        executedDocumentName: file.name,
-        executedDocumentSize: file.size,
-        executedUploadedAt: uploadedAt,
-        executedUploadedById: auth.actor.userId,
-        obligationScanStatus: "not_scanned",
-        obligationScanCompletedAt: null,
-      },
-      select: {
-        id: true,
-        executedDocumentPath: true,
-        executedDocumentName: true,
-        executedDocumentSize: true,
-        executedUploadedAt: true,
-        executedUploadedById: true,
-        obligationScanStatus: true,
-        obligationScanCompletedAt: true,
-        obligationScanVersion: true,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.obligation.deleteMany({
+        where: { contractId: contract.id },
+      });
+
+      return tx.contract.update({
+        where: { id: contract.id },
+        data: {
+          executedDocumentPath: storagePath,
+          executedDocumentName: file.name,
+          executedDocumentSize: file.size,
+          executedUploadedAt: uploadedAt,
+          executedUploadedById: auth.actor.userId,
+          obligationScanStatus: "not_scanned",
+          obligationScanCompletedAt: null,
+          obligationScanVersion: null,
+        },
+        select: {
+          id: true,
+          executedDocumentPath: true,
+          executedDocumentName: true,
+          executedDocumentSize: true,
+          executedUploadedAt: true,
+          executedUploadedById: true,
+          obligationScanStatus: true,
+          obligationScanCompletedAt: true,
+          obligationScanVersion: true,
+        },
+      });
     });
 
     await writeAuditLog({

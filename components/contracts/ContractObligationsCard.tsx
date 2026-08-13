@@ -41,6 +41,7 @@ interface ObligationPanelData {
 
 interface ContractObligationsCardProps {
   contractId: string;
+  canScan?: boolean;
 }
 
 function formatFileSize(bytes: number | null | undefined): string {
@@ -125,7 +126,10 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
-export function ContractObligationsCard({ contractId }: ContractObligationsCardProps) {
+export function ContractObligationsCard({
+  contractId,
+  canScan = false,
+}: ContractObligationsCardProps) {
   const [data, setData] = useState<ObligationPanelData | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -321,43 +325,61 @@ export function ContractObligationsCard({ contractId }: ContractObligationsCardP
         </h2>
 
         <div className="flex flex-col items-end gap-2">
-          {!hasExecutedDocument ? (
-            <p className="text-xs italic text-gray-400">
-              Upload the executed agreement below to enable obligation scanning
-            </p>
-          ) : scanStatus === "scanning" ? (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-[#3558A0]" />
-              Scanning...
-            </div>
-          ) : scanStatus === "completed" ? (
-            <div className="flex flex-col items-end gap-1">
+          {canScan ? (
+            !hasExecutedDocument ? (
+              <p className="text-xs italic text-gray-400">
+                Upload the fully executed agreement below to scan for obligations
+              </p>
+            ) : scanStatus === "scanning" ? (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-[#3558A0]" />
+                Scanning fully executed agreement...
+              </div>
+            ) : scanStatus === "completed" ? (
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => void handleScan()}
+                  disabled={scanning}
+                  className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <RobotIcon />
+                  Re-scan executed agreement
+                </button>
+                {data?.scanCompletedAt ? (
+                  <p className="text-xs text-gray-400">
+                    Last scanned {formatRelativeTime(data.scanCompletedAt)}
+                  </p>
+                ) : null}
+              </div>
+            ) : scanStatus === "failed" ? (
               <button
                 type="button"
                 onClick={() => void handleScan()}
                 disabled={scanning}
-                className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-md border border-rose-200 px-4 py-2 text-sm font-medium text-rose-900 hover:bg-rose-50 disabled:opacity-60"
               >
                 <RobotIcon />
-                Re-scan
+                Retry scan of executed agreement
               </button>
-              {data?.scanCompletedAt ? (
-                <p className="text-xs text-gray-400">
-                  Last scanned {formatRelativeTime(data.scanCompletedAt)}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void handleScan()}
-              disabled={scanning}
-              className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
-            >
-              <RobotIcon />
-              Scan for obligations
-            </button>
-          )}
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleScan()}
+                disabled={scanning}
+                className="inline-flex items-center gap-2 rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+              >
+                <RobotIcon />
+                Scan fully executed agreement
+              </button>
+            )
+          ) : hasExecutedDocument && scanStatus === "failed" ? (
+            <p className="text-xs text-rose-600">Last scan failed</p>
+          ) : hasExecutedDocument && data?.scanCompletedAt ? (
+            <p className="text-xs text-gray-400">
+              Last scanned {formatRelativeTime(data.scanCompletedAt)}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -374,20 +396,56 @@ export function ContractObligationsCard({ contractId }: ContractObligationsCardP
 
         {loading ? (
           <p className="mt-3 text-sm text-gray-400">Loading...</p>
-        ) : !hasExecutedDocument || replacing ? (
+        ) : !hasExecutedDocument ? (
+          canScan ? (
+            <div className="mt-3 rounded-xl border-2 border-dashed border-gray-200 p-6 text-center">
+              <UploadIcon />
+              <p className="mt-3 text-sm font-medium text-gray-700">
+                Upload the fully executed and signed agreement
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Obligation scans use this document only. PDF or Word, max 50MB.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) {
+                    void handleUpload(file);
+                  }
+                  event.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="mt-4 rounded-md border border-gray-200 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+              >
+                {uploading ? "Uploading..." : "Choose file"}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-gray-400">
+              No fully executed agreement uploaded yet. Legal users can upload one
+              to run an obligation scan.
+            </p>
+          )
+        ) : replacing && canScan ? (
           <div className="mt-3 rounded-xl border-2 border-dashed border-gray-200 p-6 text-center">
             <UploadIcon />
             <p className="mt-3 text-sm font-medium text-gray-700">
-              Upload the fully executed and signed agreement
+              Replace the fully executed and signed agreement
             </p>
             <p className="mt-1 text-xs text-gray-400">
-              PDF or Word document, max 50MB
+              Obligation scans use this document only. PDF or Word, max 50MB.
             </p>
-            {replacing ? (
-              <p className="mt-2 text-xs text-amber-600">
-                Replacing the executed document will require a new obligation scan
-              </p>
-            ) : null}
+            <p className="mt-2 text-xs text-amber-600">
+              Replacing the executed document will require a new obligation scan
+            </p>
             <input
               ref={fileInputRef}
               type="file"
@@ -409,6 +467,14 @@ export function ContractObligationsCard({ contractId }: ContractObligationsCardP
             >
               {uploading ? "Uploading..." : "Choose file"}
             </button>
+            <button
+              type="button"
+              onClick={() => setReplacing(false)}
+              disabled={uploading}
+              className="mt-3 text-xs font-medium text-gray-500 hover:text-gray-700"
+            >
+              Cancel
+            </button>
           </div>
         ) : (
           <div className="mt-3 flex flex-col gap-3 rounded-xl border border-gray-100 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -419,7 +485,10 @@ export function ContractObligationsCard({ contractId }: ContractObligationsCardP
                   {data?.executedDocument?.name}
                 </p>
                 <p className="text-xs text-gray-400">
-                  {formatFileSize(data?.executedDocument?.size ?? null)}
+                  Fully executed agreement
+                  {formatFileSize(data?.executedDocument?.size ?? null)
+                    ? ` · ${formatFileSize(data?.executedDocument?.size ?? null)}`
+                    : ""}
                   {data?.executedDocument?.uploadedAt
                     ? ` · Uploaded ${formatRelativeTime(data.executedDocument.uploadedAt)}`
                     : ""}
@@ -434,13 +503,15 @@ export function ContractObligationsCard({ contractId }: ContractObligationsCardP
               >
                 Download
               </button>
-              <button
-                type="button"
-                onClick={() => setReplacing(true)}
-                className="text-xs font-medium text-blue-700 hover:text-blue-900"
-              >
-                Replace
-              </button>
+              {canScan ? (
+                <button
+                  type="button"
+                  onClick={() => setReplacing(true)}
+                  className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                >
+                  Replace
+                </button>
+              ) : null}
             </div>
           </div>
         )}
@@ -450,6 +521,10 @@ export function ContractObligationsCard({ contractId }: ContractObligationsCardP
         <p className="mb-4 text-xs text-gray-500">
           {summary.total} obligations identified across {summary.typeCount} types ·{" "}
           {summary.completed} completed · {summary.active} active
+        </p>
+      ) : scanStatus === "failed" ? (
+        <p className="py-6 text-center text-sm text-rose-600">
+          The last scan failed. Legal can retry after verifying the executed agreement.
         </p>
       ) : scanStatus === "not_scanned" ? (
         <p className="py-6 text-center text-sm text-gray-400">

@@ -1885,7 +1885,7 @@ export function ContractDetailClient({
             isPrivilegedUser={isPrivilegedUser}
             onContractUpdated={(updated) => setContract(updated)}
           />
-          <ContractObligationsCard contractId={contract.id} />
+          <ContractObligationsCard contractId={contract.id} canScan={isLegalUser} />
         </>
       ) : null}
 

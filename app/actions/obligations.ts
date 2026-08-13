@@ -10,8 +10,8 @@ import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { getContractById } from "@/lib/contract-store";
 import {
   getContractObligationView,
-  runObligationScan,
 } from "@/lib/obligation-store";
+import { runObligationScanForContract } from "@/lib/obligation-scan-service";
 import { getUserDisplayName } from "@/lib/user-display-name";
 import type { ContractObligationView } from "@/types/obligations";
 
@@ -53,13 +53,21 @@ export async function scanContractObligationsAction(
     throw new Error("You do not have access to this contract record.");
   }
 
-  const result = await runObligationScan(contract, actor);
+  const organizationId =
+    (await resolveContractOrganizationId(contractId)) ?? "default";
+
+  await runObligationScanForContract({
+    contractId,
+    organizationId,
+    actorEmail: actor.email,
+    actorName: actor.name,
+  });
 
   revalidatePath(`/contracts/${contractId}`);
   revalidatePath("/legal/dashboard");
   revalidatePath("/legal/reports");
 
-  return result;
+  return getContractObligationView(contractId);
 }
 
 export async function getContractObligationViewAction(
