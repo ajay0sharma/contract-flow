@@ -142,12 +142,18 @@ function resolveWorkflowSubtitle(contract: ContractRecord): string {
     return "Awaiting countersignature";
   }
 
+  if (isAwaitingLegalPickup(contract)) {
+    return "Awaiting legal pickup";
+  }
+
   const currentStep = contract.workflowSteps.find(
     (step) => step.status === "current",
   );
 
   if (currentStep) {
-    return `Waiting on ${currentStep.assigneeName}`;
+    return currentStep.assigneeEmail.trim()
+      ? `Waiting on ${currentStep.assigneeName}`
+      : "Awaiting assignment";
   }
 
   return "Approval workflow in progress";
@@ -157,6 +163,7 @@ interface WorkflowTimelineProps {
   contract: ContractRecord;
   userEmail: string;
   isPrivilegedUser: boolean;
+  isLegalUser: boolean;
   actionPending: boolean;
   onApprove: () => void;
   onReject: () => void;
@@ -167,12 +174,15 @@ export function WorkflowTimeline({
   contract,
   userEmail,
   isPrivilegedUser,
+  isLegalUser,
   actionPending,
   onApprove,
   onReject,
   onContractUpdated,
 }: WorkflowTimelineProps) {
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [pickupPending, setPickupPending] = useState(false);
+  const [pickupError, setPickupError] = useState<string | null>(null);
   const [signatureLoading, setSignatureLoading] = useState(false);
   const [signatureError, setSignatureError] = useState<string | null>(null);
   const [signatureProviderName, setSignatureProviderName] = useState<string | null>(
@@ -219,22 +229,61 @@ export function WorkflowTimeline({
       });
   }, [contract.id, contract.stage, isPrivilegedUser]);
 
+  const awaitingLegalPickup = isAwaitingLegalPickup(contract);
+
+  useDeferredEffect(() => {
+    setPickupError(null);
+  }, [contract.id, awaitingLegalPickup]);
+
   const rejectedStep = contract.workflowSteps.find(
     (step) => step.status === "rejected",
   );
   const normalizedUserEmail = userEmail.trim().toLowerCase();
-  const canPickupAndAct =
-    isPrivilegedUser && isAwaitingLegalPickup(contract);
 
   function canActOnStep(step: WorkflowStep): boolean {
-    const isAssignee =
-      step.assigneeEmail.trim().toLowerCase() === normalizedUserEmail;
+    return (
+      step.assigneeEmail.trim().toLowerCase() === normalizedUserEmail
+    );
+  }
 
-    if (isAssignee) {
-      return true;
+  function canPickupStep(step: WorkflowStep): boolean {
+    return (
+      isLegalUser &&
+      awaitingLegalPickup &&
+      step.id === "legal" &&
+      step.status === "current"
+    );
+  }
+
+  async function handlePickup(): Promise<void> {
+    setPickupPending(true);
+    setPickupError(null);
+
+    try {
+      const response = await fetch(`/api/contracts/${contract.id}/pickup`, {
+        method: "POST",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | ContractRecord
+        | { error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          payload && "error" in payload && payload.error
+            ? payload.error
+            : "Failed to pick up contract.",
+        );
+      }
+
+      onContractUpdated?.(payload as ContractRecord);
+    } catch (error) {
+      setPickupError(
+        error instanceof Error ? error.message : "Failed to pick up contract.",
+      );
+    } finally {
+      setPickupPending(false);
     }
-
-    return canPickupAndAct && step.id === "legal";
   }
   const canReassign =
     isPrivilegedUser &&
@@ -313,6 +362,21 @@ export function WorkflowTimeline({
                         waitingSinceDate(contract, index),
                       )}
                     </p>
+                    {step.status === "current" && canPickupStep(step) ? (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          disabled={actionPending || pickupPending}
+                          onClick={() => void handlePickup()}
+                          className="rounded-md bg-[#3558A0] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2d4a88] disabled:opacity-60"
+                        >
+                          {pickupPending ? "Picking up..." : "Pick up"}
+                        </button>
+                        {pickupError ? (
+                          <p className="text-xs text-rose-700">{pickupError}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {step.status === "current" && canActOnStep(step) ? (
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -321,9 +385,7 @@ export function WorkflowTimeline({
                           onClick={onApprove}
                           className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
                         >
-                          {canPickupAndAct && step.id === "legal"
-                            ? "Pick up and approve"
-                            : "Approve"}
+                          Approve
                         </button>
                         <button
                           type="button"
@@ -331,9 +393,7 @@ export function WorkflowTimeline({
                           onClick={onReject}
                           className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-60"
                         >
-                          {canPickupAndAct && step.id === "legal"
-                            ? "Pick up and reject"
-                            : "Reject"}
+                          Reject
                         </button>
                       </div>
                     ) : null}

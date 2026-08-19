@@ -821,6 +821,20 @@ export function ContractDetailClient({
     }
   }, [contractId]);
 
+  const handleWorkflowContractUpdated = useCallback(
+    async (updated: ContractRecord) => {
+      setContract(updated);
+
+      try {
+        const record = await fetchContract(contractId);
+        setContract(record);
+      } catch {
+        // Keep the pickup/reassign response if a full refresh fails.
+      }
+    },
+    [contractId],
+  );
+
   async function handleDownloadDraft(): Promise<void> {
     setDraftDownloadPending(true);
     setToast(null);
@@ -1130,10 +1144,11 @@ export function ContractDetailClient({
       contract={contract}
       userEmail={userEmail}
       isPrivilegedUser={isPrivilegedUser}
+      isLegalUser={isLegalUser}
       actionPending={actionPending}
       onApprove={() => openApprovalModal("approve")}
       onReject={() => openApprovalModal("reject")}
-      onContractUpdated={(updated) => setContract(updated)}
+      onContractUpdated={(updated) => void handleWorkflowContractUpdated(updated)}
     />
   );
 
