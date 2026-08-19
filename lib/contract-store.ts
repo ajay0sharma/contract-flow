@@ -152,6 +152,7 @@ export function normalizeContractRecord(
     renewalStatus: contract.renewalStatus ?? "not_due",
     renewedFromContractId: contract.renewedFromContractId ?? null,
     renewalStartedAt: contract.renewalStartedAt ?? null,
+    legalReviewRounds: contract.legalReviewRounds ?? [],
   };
 }
 
@@ -1327,6 +1328,19 @@ export function addContractAttachment(
     updatedAt: timestamp,
   });
 
+  store[index] = updated;
+  return updated;
+}
+
+export function replaceContractRecordInStore(record: ContractRecord): ContractRecord {
+  const store = getStore();
+  const index = store.findIndex((contract) => contract.id === record.id);
+
+  if (index === -1) {
+    throw new Error("Contract not found.");
+  }
+
+  const updated = normalizeContractRecord(record);
   store[index] = updated;
   return updated;
 }

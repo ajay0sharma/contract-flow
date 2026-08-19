@@ -17,6 +17,7 @@ import {
 import { getSupabaseStorageSetupMessage, isSupabaseStorageConfigured } from "@/lib/supabase-storage";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { addContractAttachment } from "@/lib/contract-store";
+import { maybeStartLegalReviewRoundForAttachmentUpload } from "@/lib/legal-review-store";
 import type { ContractIntakeAttachmentInput } from "@/types/contract";
 
 function readFileAsBase64(buffer: Buffer): string {
@@ -93,8 +94,23 @@ export async function POST(
 
     if (allowMemoryPersistence()) {
       const existingIds = new Set(contract.attachments.map((item) => item.id));
+      const priorCurrentAttachment = contract.attachments.find(
+        (item) =>
+          item.documentType === (documentType as IntakeDocumentType) &&
+          item.isCurrent !== false,
+      );
       const record = addContractAttachment(contractId, input, actor);
       const attachment = record.attachments.find((item) => !existingIds.has(item.id));
+
+      if (attachment && priorCurrentAttachment) {
+        void maybeStartLegalReviewRoundForAttachmentUpload({
+          contractId,
+          organizationId,
+          attachment,
+          priorCurrentAttachment,
+          actor,
+        });
+      }
 
       return NextResponse.json({
         attachment: attachment

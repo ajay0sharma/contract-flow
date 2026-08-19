@@ -26,6 +26,7 @@ import {
   sanitizeAttachmentForClient,
   sanitizeContractRecordForClient,
 } from "@/lib/contract-attachment-storage";
+import { compareDocumentTexts } from "@/lib/legal-review-comparison";
 import {
   groupAttachmentsByVersion,
   normalizeContractAttachments,
@@ -1311,6 +1312,28 @@ function runAttachmentVersionUnitTests(): void {
 }
 
 
+
+function runLegalReviewUnitTests(): void {
+  const comparison = compareDocumentTexts({
+    baselineText:
+      "Limitation of liability. Each party liability shall not exceed fees paid in twelve months.\n\nTermination. Either party may terminate for material breach.",
+    counterpartyText:
+      "Limitation of liability. Each party liability shall not exceed two times fees paid in twelve months.\n\nTermination. Either party may terminate for material breach with thirty days notice.",
+  });
+
+  assert(
+    "Document comparison detects modified agreement language",
+    comparison.deviations.some((item) => item.kind === "modified"),
+    JSON.stringify(comparison),
+  );
+
+  assert(
+    "Comparison summary reports deviation count",
+    comparison.summary.includes("deviation"),
+    comparison.summary,
+  );
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
@@ -1321,6 +1344,7 @@ async function main(): Promise<void> {
   runContractSearchUnitTests();
   runAttachmentStorageUnitTests();
   runAttachmentVersionUnitTests();
+  runLegalReviewUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();

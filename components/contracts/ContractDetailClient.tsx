@@ -8,6 +8,7 @@ import { PageShell } from "@/components/PageShell";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
 import { StageBadge } from "@/components/contracts/StageBadge";
 import { ContractAttachmentVersionGroups } from "@/components/contracts/ContractAttachmentVersionGroups";
+import { LegalReviewComparisonPanel } from "@/components/contracts/LegalReviewComparisonPanel";
 import { UploadContractAttachmentForm } from "@/components/contracts/UploadContractAttachmentForm";
 import { ContractRelatedEmails } from "@/components/contracts/ContractRelatedEmails";
 import { ContractESignatureSection } from "@/components/contracts/ContractESignatureSection";
@@ -1818,6 +1819,13 @@ export function ContractDetailClient({
           />
         )}
       </section>
+
+      {isLegalUser ? (
+        <LegalReviewComparisonPanel
+          contractId={contract.id}
+          attachments={contract.attachments}
+        />
+      ) : null}
 
       <ContractRelatedEmails
         contractId={contract.id}

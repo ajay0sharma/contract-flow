@@ -1,3 +1,5 @@
+import type { LegalReviewRound } from "@/types/legal-review";
+
 export type ContractStage =
   | "request"
   | "legal_review"
@@ -272,6 +274,7 @@ export interface ContractRecord {
   auditTrail: AuditEvent[];
   attachments: ContractAttachment[];
   relatedEmails: ContractEmail[];
+  legalReviewRounds?: LegalReviewRound[];
   createdAt: string;
   updatedAt: string;
 }

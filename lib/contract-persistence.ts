@@ -29,7 +29,9 @@ import {
   normalizeContractAttachments,
   prepareAttachmentUpload,
 } from "@/lib/contract-attachment-versions";
+import type { LegalReviewRound } from "@/types/legal-review";
 import { getPrismaClient } from "@/lib/prisma";
+import { maybeStartLegalReviewRoundForAttachmentUpload } from "@/lib/legal-review-store";
 import { safeTrim } from "@/lib/string-utils";
 import { captureException } from "@/lib/error-reporting";
 import {
@@ -101,6 +103,14 @@ function parseRelatedEmails(value: unknown): ContractEmail[] {
   }
 
   return value as ContractEmail[];
+}
+
+function parseLegalReviewRounds(value: unknown): LegalReviewRound[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value as LegalReviewRound[];
 }
 
 function toAmountNumeric(value: Prisma.Decimal | null | undefined): number {
@@ -278,6 +288,7 @@ export function mapPrismaContractToRecord(record: ContractRow): ContractRecord {
     auditTrail: parseAuditTrail(record.auditTrail),
     attachments: parseAttachments(record.attachments),
     relatedEmails: parseRelatedEmails(record.relatedEmails),
+    legalReviewRounds: parseLegalReviewRounds(record.legalReviewRounds),
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -334,6 +345,7 @@ function mapRecordToPrismaData(
     auditTrail: toJsonValue(record.auditTrail),
     attachments: toJsonValue(record.attachments),
     relatedEmails: toJsonValue(record.relatedEmails),
+    legalReviewRounds: toJsonValue(record.legalReviewRounds ?? []),
     expiryDate: parseOptionalDate(record.expiryDate),
     effectiveDate: parseOptionalDate(record.effectiveDate),
     autoRenewal: record.autoRenewal ?? false,
@@ -428,6 +440,7 @@ export async function saveContractRecord(
       auditTrail: data.auditTrail,
       attachments: data.attachments,
       relatedEmails: data.relatedEmails,
+      legalReviewRounds: data.legalReviewRounds,
       updatedAt: data.updatedAt,
     },
   });
@@ -1194,6 +1207,22 @@ export async function appendContractAttachmentAndPersist(
     updatedAt: timestamp,
   });
 
+  const priorCurrentAttachment = contract.attachments.find(
+    (item) =>
+      item.documentType === attachment.documentType && item.isCurrent !== false,
+  );
+
   await saveContractRecord(updated);
+
+  if (replacesPriorVersion && priorCurrentAttachment) {
+    await maybeStartLegalReviewRoundForAttachmentUpload({
+      contractId,
+      organizationId,
+      attachment: storedAttachment,
+      priorCurrentAttachment,
+      actor,
+    });
+  }
+
   return { record: updated, attachment: storedAttachment };
 }

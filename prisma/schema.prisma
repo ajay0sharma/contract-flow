@@ -234,6 +234,7 @@ model Contract {
   obligationScanVersion       Int?
   obligations                 Json?
   obligationSummary           String?              @db.Text
+  legalReviewRounds           Json?
   riskScore                   RiskScore            @default(not_scored)
   riskScoreCompletedAt        DateTime?
   riskScoreSummary            String?              @db.Text
