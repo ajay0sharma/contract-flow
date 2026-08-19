@@ -32,6 +32,10 @@ import type {
   ContractRecordUpdateInput,
   ContractStage,
 } from "@/types/contract";
+import {
+  normalizeAttachmentVersionFields,
+  prepareAttachmentUpload,
+} from "@/lib/contract-attachment-versions";
 import { safeTrim } from "@/lib/string-utils";
 
 function normalizeEmail(email: string): string {
@@ -39,14 +43,14 @@ function normalizeEmail(email: string): string {
 }
 
 function normalizeAttachment(attachment: ContractAttachment): ContractAttachment {
-  const normalized: ContractAttachment = {
+  const normalized: ContractAttachment = normalizeAttachmentVersionFields({
     ...attachment,
     title: attachment.title ?? attachment.fileName ?? "Untitled document",
     fileName: attachment.fileName ?? attachment.title ?? "document",
     uploadedByName: attachment.uploadedByName ?? "Unknown user",
     uploadedByEmail: attachment.uploadedByEmail ?? "",
     storagePath: attachment.storagePath?.trim() || undefined,
-  };
+  });
 
   if (!normalized.storagePath && attachment.dataBase64?.trim()) {
     normalized.dataBase64 = attachment.dataBase64;
@@ -1283,6 +1287,12 @@ export function addContractAttachment(
   }
 
   const timestamp = new Date().toISOString();
+  const {
+    updatedAttachments,
+    versionGroupId,
+    versionNumber,
+    replacesPriorVersion,
+  } = prepareAttachmentUpload(store[index].attachments, input.documentType);
   const attachment: ContractAttachment = {
     id: `att-${Date.now()}`,
     title: input.fileName,
@@ -1294,10 +1304,13 @@ export function addContractAttachment(
     uploadedByName: actor.name,
     uploadedByEmail: actor.email,
     dataBase64: input.dataBase64,
+    versionGroupId,
+    versionNumber,
+    isCurrent: true,
   };
   const updated = normalizeContractRecord({
     ...store[index],
-    attachments: [...(store[index].attachments ?? []), attachment],
+    attachments: [...updatedAttachments, attachment],
     auditTrail: [
       ...(store[index].auditTrail ?? []),
       {
@@ -1306,7 +1319,9 @@ export function addContractAttachment(
         actorName: actor.name,
         actorEmail: actor.email,
         action: "Document uploaded",
-        detail: `${attachment.title} was uploaded to the contract record.`,
+        detail: replacesPriorVersion
+          ? `${attachment.title} was uploaded as version ${versionNumber}, replacing the prior ${input.documentType.replaceAll("_", " ")} file.`
+          : `${attachment.title} was uploaded to the contract record.`,
       },
     ],
     updatedAt: timestamp,

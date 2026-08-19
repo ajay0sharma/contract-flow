@@ -2,6 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit-log";
 import { sanitizeAttachmentForClient } from "@/lib/contract-attachment-storage";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { addContractAttachmentAndPersist } from "@/lib/contract-persistence";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
@@ -43,7 +44,9 @@ export async function POST(
   }
 
   const { id: contractId } = await context.params;
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const organizationId =
+    (await resolveContractOrganizationId(contractId)) ??
+    resolveClauseLibraryOrganizationId();
 
   try {
     const contract = await loadMergedContractRecord(contractId, organizationId);
@@ -89,8 +92,9 @@ export async function POST(
     };
 
     if (allowMemoryPersistence()) {
+      const existingIds = new Set(contract.attachments.map((item) => item.id));
       const record = addContractAttachment(contractId, input, actor);
-      const attachment = record.attachments.at(-1);
+      const attachment = record.attachments.find((item) => !existingIds.has(item.id));
 
       return NextResponse.json({
         attachment: attachment
@@ -106,21 +110,12 @@ export async function POST(
       );
     }
 
-    const beforeCount = contract.attachments.length;
-    const record = await addContractAttachmentAndPersist(
+    const { attachment } = await addContractAttachmentAndPersist(
       contractId,
       organizationId,
       input,
       actor,
     );
-    const attachment = record.attachments.at(beforeCount);
-
-    if (!attachment) {
-      return NextResponse.json(
-        { error: "Failed to save attachment." },
-        { status: 500 },
-      );
-    }
 
     await writeAuditLog({
       organizationId,
@@ -129,11 +124,17 @@ export async function POST(
       action: "contract_attachment_uploaded",
       actorEmail: actor.email,
       actorName: actor.name,
-      detail: `Uploaded attachment ${file.name} to contract ${contract.recordNumber}.`,
+      detail:
+        attachment.versionNumber && attachment.versionNumber > 1
+          ? `Uploaded version ${attachment.versionNumber} of ${file.name} to contract ${contract.recordNumber}.`
+          : `Uploaded attachment ${file.name} to contract ${contract.recordNumber}.`,
       metadata: {
         attachmentId: attachment.id,
         storagePath: attachment.storagePath,
         documentType,
+        versionGroupId: attachment.versionGroupId,
+        versionNumber: attachment.versionNumber,
+        isCurrent: attachment.isCurrent,
       },
     });
 

@@ -7,6 +7,7 @@ import { useDeferredEffect } from "@/lib/use-deferred-effect";
 import { PageShell } from "@/components/PageShell";
 import { ContractStatusBadge } from "@/components/contracts/ContractStatusBadge";
 import { StageBadge } from "@/components/contracts/StageBadge";
+import { ContractAttachmentVersionGroups } from "@/components/contracts/ContractAttachmentVersionGroups";
 import { UploadContractAttachmentForm } from "@/components/contracts/UploadContractAttachmentForm";
 import { ContractRelatedEmails } from "@/components/contracts/ContractRelatedEmails";
 import { ContractESignatureSection } from "@/components/contracts/ContractESignatureSection";
@@ -16,7 +17,6 @@ import { WorkflowTimeline } from "@/components/contracts/WorkflowTimeline";
 import { PeoplePicker } from "@/components/shared/PeoplePicker";
 import { useTier } from "@/components/providers/TierProvider";
 import { isSupportEmail } from "@/lib/access-control";
-import { getIntakeDocumentTypeLabel } from "@/lib/intake-documents";
 import {
   formatAuditTimestamp,
   formatContractDate,
@@ -276,17 +276,6 @@ const PUBLIC_AUDIT_ACTIONS = new Set([
   "Email captured",
 ]);
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function resolveContractStatus(
   contract: ContractRecord,
@@ -548,116 +537,6 @@ function DetailField({
     <div>
       <dt className={FIELD_LABEL_CLASS}>{label}</dt>
       <dd className={FIELD_VALUE_CLASS}>{value?.trim() || "—"}</dd>
-    </div>
-  );
-}
-
-function FileTypeIcon({ mimeType }: { mimeType: string }) {
-  if (mimeType === "application/pdf") {
-    return (
-      <span className="text-rose-600" aria-hidden="true">
-        PDF
-      </span>
-    );
-  }
-
-  if (mimeType.startsWith("image/")) {
-    return (
-      <span className="text-blue-600" aria-hidden="true">
-        IMG
-      </span>
-    );
-  }
-
-  return (
-    <span className="text-gray-500" aria-hidden="true">
-      DOC
-    </span>
-  );
-}
-
-function AttachmentRow({
-  attachment,
-  contractId,
-}: {
-  attachment: ContractAttachment;
-  contractId: string;
-}) {
-  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDownloadUrl(): Promise<void> {
-      setDownloadError(null);
-      setDownloadUrl(null);
-
-      try {
-        const response = await fetch(
-          `/api/contracts/${contractId}/attachments/${attachment.id}/download`,
-        );
-        const payload = (await response.json().catch(() => null)) as
-          | { url?: string; error?: string }
-          | null;
-
-        if (!response.ok || !payload?.url) {
-          throw new Error(payload?.error ?? "Unable to load download link.");
-        }
-
-        if (!cancelled) {
-          setDownloadUrl(payload.url);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setDownloadError(
-            error instanceof Error ? error.message : "Unable to load download link.",
-          );
-        }
-      }
-    }
-
-    void loadDownloadUrl();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [attachment.id, contractId]);
-
-  return (
-    <div className="flex items-start gap-3 border-t border-gray-100 pt-4 first:border-t-0 first:pt-0">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-xs font-semibold">
-        <FileTypeIcon mimeType={attachment.mimeType} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gray-900">{attachment.fileName}</p>
-        <p className="mt-0.5 text-xs text-gray-500">
-          {getIntakeDocumentTypeLabel(attachment.documentType)} ·{" "}
-          {formatFileSize(attachment.sizeBytes)}
-        </p>
-        <p className="mt-0.5 text-xs text-gray-500">
-          Uploaded by {attachment.uploadedByName} on{" "}
-          {formatContractDateTime(attachment.uploadedAt)}
-        </p>
-        {downloadError ? (
-          <p className="mt-1 text-xs text-rose-600">{downloadError}</p>
-        ) : null}
-      </div>
-      {downloadUrl ? (
-        <a
-          href={downloadUrl}
-          download={attachment.fileName}
-          target={downloadUrl.startsWith("data:") ? undefined : "_blank"}
-          rel={downloadUrl.startsWith("data:") ? undefined : "noopener noreferrer"}
-          className="shrink-0 rounded-md border border-gray-200 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-gray-50"
-        >
-          Download
-        </a>
-      ) : (
-        <span className="shrink-0 rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-400">
-          Loading...
-        </span>
-      )}
     </div>
   );
 }
@@ -1908,10 +1787,10 @@ export function ContractDetailClient({
         <h2 className={CARD_HEADER_CLASS}>Attachments</h2>
         <p className="mt-1 text-sm text-gray-500">
           {isEditing && isPrivilegedUser
-            ? "Upload supporting documents while you edit this record."
+            ? "Upload supporting documents while you edit this record. Uploading the same document type again saves a new version."
             : isSupportEmail(userEmail)
               ? "Upload agreements or supporting documents to this record."
-              : "Documents uploaded to this contract record."}
+              : "Documents uploaded to this contract record. Uploading the same document type again saves a new version and keeps prior versions visible."}
         </p>
 
         {showAttachmentUpload ? (
@@ -1933,11 +1812,10 @@ export function ContractDetailClient({
           </p>
           )
         ) : (
-          <div className="mt-4 space-y-4">
-            {contract.attachments.map((attachment) => (
-              <AttachmentRow key={attachment.id} attachment={attachment} contractId={contract.id} />
-            ))}
-          </div>
+          <ContractAttachmentVersionGroups
+            contractId={contract.id}
+            attachments={contract.attachments}
+          />
         )}
       </section>
 

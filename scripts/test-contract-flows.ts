@@ -27,6 +27,11 @@ import {
   sanitizeContractRecordForClient,
 } from "@/lib/contract-attachment-storage";
 import {
+  groupAttachmentsByVersion,
+  normalizeContractAttachments,
+  prepareAttachmentUpload,
+} from "@/lib/contract-attachment-versions";
+import {
   matchesContractSearchTerms,
   parseContractSearchTerms,
 } from "@/lib/contract-search-service";
@@ -1196,6 +1201,116 @@ async function runWorkflowSyncUnitTests(): Promise<void> {
   await updateWorkflowConfig(getDefaultWorkflowConfig(), ORG_ID);
 }
 
+
+function runAttachmentVersionUnitTests(): void {
+  const legacyAttachment = {
+    id: "att-legacy",
+    title: "Legacy.pdf",
+    fileName: "Legacy.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 100,
+    documentType: "supporting_document" as const,
+    uploadedAt: "2026-01-01T00:00:00.000Z",
+    uploadedByName: "Tester",
+    uploadedByEmail: "tester@example.com",
+  };
+
+  const normalizedLegacy = normalizeContractAttachments([legacyAttachment])[0];
+
+  assert(
+    "Legacy attachments default to version 1 current",
+    normalizedLegacy.versionNumber === 1 &&
+      normalizedLegacy.isCurrent === true &&
+      normalizedLegacy.versionGroupId === "att-legacy",
+    JSON.stringify(normalizedLegacy),
+  );
+
+  const currentAttachment = {
+    ...legacyAttachment,
+    id: "att-current",
+    versionGroupId: "grp-1",
+    versionNumber: 1,
+    isCurrent: true,
+  };
+
+  const prepared = prepareAttachmentUpload(
+    [currentAttachment],
+    "supporting_document",
+  );
+
+  assert(
+    "Uploading the same document type archives the prior current version",
+    prepared.versionNumber === 2 &&
+      prepared.replacesPriorVersion === true &&
+      prepared.updatedAttachments[0]?.isCurrent === false,
+    JSON.stringify(prepared),
+  );
+
+  const versionedAttachments = [
+    ...prepared.updatedAttachments,
+    {
+      ...currentAttachment,
+      id: "att-current-v2",
+      fileName: "Legacy v2.pdf",
+      title: "Legacy v2.pdf",
+      versionGroupId: prepared.versionGroupId,
+      versionNumber: prepared.versionNumber,
+      isCurrent: true,
+      uploadedAt: "2026-02-01T00:00:00.000Z",
+    },
+  ];
+
+
+  const duplicateCurrent = normalizeContractAttachments([
+    {
+      id: "att-v1",
+      title: "Draft v1.pdf",
+      fileName: "Draft v1.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 100,
+      documentType: "third_party_document",
+      uploadedAt: "2026-01-01T00:00:00.000Z",
+      uploadedByName: "Tester",
+      uploadedByEmail: "tester@example.com",
+      versionGroupId: "grp-dup",
+      versionNumber: 1,
+      isCurrent: true,
+    },
+    {
+      id: "att-v2",
+      title: "Draft v2.pdf",
+      fileName: "Draft v2.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 100,
+      documentType: "third_party_document",
+      uploadedAt: "2026-02-01T00:00:00.000Z",
+      uploadedByName: "Tester",
+      uploadedByEmail: "tester@example.com",
+      versionGroupId: "grp-dup",
+      versionNumber: 2,
+      isCurrent: true,
+    },
+  ]);
+
+  assert(
+    "Duplicate current flags collapse to the highest version",
+    duplicateCurrent.filter((attachment) => attachment.isCurrent).length === 1 &&
+      duplicateCurrent.find((attachment) => attachment.isCurrent)?.id === "att-v2",
+    JSON.stringify(duplicateCurrent),
+  );
+
+  const groups = groupAttachmentsByVersion(versionedAttachments);
+
+  assert(
+    "Attachment groups expose one current and one prior version",
+    groups.length === 1 &&
+      groups[0]?.current.id === "att-current-v2" &&
+      groups[0]?.priorVersions.length === 1,
+    JSON.stringify(groups),
+  );
+}
+
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
@@ -1205,6 +1320,7 @@ async function main(): Promise<void> {
   runWorkflowPolicyUnitTests();
   runContractSearchUnitTests();
   runAttachmentStorageUnitTests();
+  runAttachmentVersionUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();

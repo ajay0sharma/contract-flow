@@ -1,4 +1,5 @@
 import { isPopulated, safeTrim } from "@/lib/string-utils";
+import { createIntakeAttachmentVersionFields } from "@/lib/contract-attachment-versions";
 import { getIntakeDocumentTypeLabel } from "@/lib/intake-documents";
 import { getWorkflowConfig } from "@/lib/workflow-config-read";
 import { resolveWorkflowConfigForContractType } from "@/lib/workflow-config-resolve";
@@ -425,6 +426,7 @@ export function createContractFromIntake(
     uploadedByName: input.requesterName,
     uploadedByEmail: input.requesterEmail,
     dataBase64: attachment.dataBase64,
+    ...createIntakeAttachmentVersionFields(index),
   }));
 
   const auditTrail = [

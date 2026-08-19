@@ -87,6 +87,9 @@ export interface ContractAttachment {
   uploadedByEmail: string;
   storagePath?: string;
   dataBase64?: string;
+  versionGroupId?: string;
+  versionNumber?: number;
+  isCurrent?: boolean;
 }
 
 export interface ContractIntakeAttachmentInput {

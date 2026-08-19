@@ -25,6 +25,10 @@ import {
   persistAttachmentToObjectStorage,
   persistContractAttachmentsToObjectStorage,
 } from "@/lib/contract-attachment-storage";
+import {
+  normalizeContractAttachments,
+  prepareAttachmentUpload,
+} from "@/lib/contract-attachment-versions";
 import { getPrismaClient } from "@/lib/prisma";
 import { safeTrim } from "@/lib/string-utils";
 import { captureException } from "@/lib/error-reporting";
@@ -88,7 +92,7 @@ function parseAttachments(value: unknown): ContractAttachment[] {
     return [];
   }
 
-  return value as ContractAttachment[];
+  return normalizeContractAttachments(value as ContractAttachment[]);
 }
 
 function parseRelatedEmails(value: unknown): ContractEmail[] {
@@ -1117,10 +1121,10 @@ export async function addContractAttachmentAndPersist(
   organizationId: string,
   input: ContractIntakeAttachmentInput,
   actor: { email: string; name: string },
-): Promise<ContractRecord> {
+): Promise<{ record: ContractRecord; attachment: ContractAttachment }> {
   const timestamp = new Date().toISOString();
   const attachmentId = `att-${Date.now()}`;
-  let attachment: ContractAttachment = {
+  const attachment: ContractAttachment = {
     id: attachmentId,
     title: input.fileName,
     fileName: input.fileName,
@@ -1146,7 +1150,7 @@ export async function appendContractAttachmentAndPersist(
   organizationId: string,
   attachment: ContractAttachment,
   actor: { email: string; name: string },
-): Promise<ContractRecord> {
+): Promise<{ record: ContractRecord; attachment: ContractAttachment }> {
   const contract = await loadContractRecord(contractId, organizationId);
 
   if (!contract) {
@@ -1154,14 +1158,26 @@ export async function appendContractAttachmentAndPersist(
   }
 
   const timestamp = new Date().toISOString();
+  const {
+    updatedAttachments,
+    versionGroupId,
+    versionNumber,
+    replacesPriorVersion,
+  } = prepareAttachmentUpload(contract.attachments, attachment.documentType);
+  const versionedAttachment: ContractAttachment = {
+    ...attachment,
+    versionGroupId,
+    versionNumber,
+    isCurrent: true,
+  };
   const storedAttachment = await persistAttachmentToObjectStorage(
-    attachment,
+    versionedAttachment,
     organizationId,
     contractId,
   );
   const updated = normalizeContractRecord({
     ...contract,
-    attachments: [...(contract.attachments ?? []), storedAttachment],
+    attachments: [...updatedAttachments, storedAttachment],
     auditTrail: [
       ...(contract.auditTrail ?? []),
       {
@@ -1170,12 +1186,14 @@ export async function appendContractAttachmentAndPersist(
         actorName: actor.name,
         actorEmail: actor.email,
         action: "Document uploaded",
-        detail: `${storedAttachment.title} was uploaded to the contract record.`,
+        detail: replacesPriorVersion
+          ? `${storedAttachment.title} was uploaded as version ${versionNumber}, replacing the prior ${attachment.documentType.replaceAll("_", " ")} file.`
+          : `${storedAttachment.title} was uploaded to the contract record.`,
       },
     ],
     updatedAt: timestamp,
   });
 
   await saveContractRecord(updated);
-  return updated;
+  return { record: updated, attachment: storedAttachment };
 }

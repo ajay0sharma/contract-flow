@@ -7,18 +7,28 @@ export function findFullyExecutedAgreement(
     .filter(
       (attachment) => attachment.documentType === "fully_executed_agreement",
     )
-    .sort(
-      (left, right) =>
+    .sort((left, right) => {
+      const leftCurrent = left.isCurrent !== false ? 1 : 0;
+      const rightCurrent = right.isCurrent !== false ? 1 : 0;
+
+      if (leftCurrent !== rightCurrent) {
+        return rightCurrent - leftCurrent;
+      }
+
+      return (
         new Date(right.uploadedAt).getTime() -
-        new Date(left.uploadedAt).getTime(),
-    )[0];
+        new Date(left.uploadedAt).getTime()
+      );
+    })[0];
 }
 
 export function hasFullyExecutedAgreement(
   attachments: ContractAttachment[],
 ): boolean {
   return attachments.some(
-    (attachment) => attachment.documentType === "fully_executed_agreement",
+    (attachment) =>
+      attachment.documentType === "fully_executed_agreement" &&
+      attachment.isCurrent !== false,
   );
 }
 

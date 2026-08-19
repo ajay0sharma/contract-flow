@@ -108,8 +108,8 @@ export function UploadContractAttachmentForm({
         }
       >
         {isDetail
-          ? "Add agreements or supporting documents while editing this record."
-          : "Support, legal, and admin users can add agreements or supporting documents to this record."}
+          ? "Add agreements or supporting documents while editing this record. Uploading the same document type again creates a new version."
+          : "Support, legal, and admin users can add documents to this record. Uploading the same document type again creates a new version."}
       </p>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <label className="block text-sm">

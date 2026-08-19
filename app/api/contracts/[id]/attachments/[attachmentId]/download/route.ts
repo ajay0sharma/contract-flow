@@ -1,6 +1,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { sanitizeAttachmentForClient } from "@/lib/contract-attachment-storage";
+import { resolveContractOrganizationId } from "@/lib/contract-email-org";
 import { resolveClauseLibraryOrganizationId } from "@/lib/clause-library-org";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { canViewContractRecord } from "@/lib/contract-store";
@@ -30,7 +31,9 @@ export async function GET(
   }
 
   const { id: contractId, attachmentId } = await context.params;
-  const organizationId = resolveClauseLibraryOrganizationId();
+  const organizationId =
+    (await resolveContractOrganizationId(contractId)) ??
+    resolveClauseLibraryOrganizationId();
 
   try {
     const contract = await loadMergedContractRecord(contractId, organizationId);
