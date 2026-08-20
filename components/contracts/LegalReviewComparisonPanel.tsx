@@ -26,13 +26,6 @@ const PRIORITY_STYLES: Record<
   low: "bg-slate-100 text-slate-700",
 };
 
-const STATUS_STYLES: Record<LegalReviewDeviation["status"], string> = {
-  open: "bg-blue-100 text-blue-800",
-  accepted: "bg-emerald-100 text-emerald-800",
-  rejected: "bg-rose-100 text-rose-800",
-  resolved: "bg-gray-100 text-gray-700",
-};
-
 function DeviationComments({
   contractId,
   roundId,
@@ -185,135 +178,70 @@ function DeviationCard({
   comments: LegalReviewComment[];
   onUpdated: () => void;
 }) {
-  const [expanded, setExpanded] = useState(
-    deviation.priority === "critical" || deviation.priority === "high",
-  );
-  const [updating, setUpdating] = useState(false);
-
-  async function updateDeviation(
-    patch: Partial<Pick<LegalReviewDeviation, "status" | "priority">>,
-  ): Promise<void> {
-    setUpdating(true);
-
-    try {
-      const response = await fetch(
-        `/api/contracts/${contractId}/legal-review/${round.id}/deviations/${deviation.id}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
-        },
-      );
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? "Unable to update deviation.");
-      }
-
-      onUpdated();
-    } finally {
-      setUpdating(false);
-    }
-  }
-
   return (
     <article className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[deviation.priority]}`}
-            >
-              {deviation.priority}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[deviation.priority]}`}
+          >
+            {deviation.priority}
+          </span>
+          {deviation.kind === "clause_deviation" ? (
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
+              Clause deviation
             </span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[deviation.status]}`}
-            >
-              {deviation.status}
-            </span>
-            {deviation.kind === "clause_deviation" ? (
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
-                Clause deviation
-              </span>
-            ) : null}
-          </div>
-          <h3 className="text-sm font-semibold text-foreground">{deviation.title}</h3>
-          <p className="text-sm text-text-secondary">{deviation.summary}</p>
-          {deviation.clauseTitle ? (
-            <p className="text-xs text-text-muted">
-              Approved clause: {deviation.clauseTitle}
-            </p>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((value) => !value)}
-          className="text-sm font-medium text-accent hover:underline"
-        >
-          {expanded ? "Hide details" : "Review"}
-        </button>
+        <h3 className="text-sm font-semibold text-foreground">{deviation.title}</h3>
+        <p className="text-sm text-text-secondary">{deviation.summary}</p>
+        {deviation.clauseTitle ? (
+          <p className="text-xs text-text-muted">
+            Approved clause: {deviation.clauseTitle}
+          </p>
+        ) : null}
       </div>
 
-      {expanded ? (
-        <div className="mt-4 space-y-4">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-md border border-border bg-surface-muted p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Prior version
-              </p>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
-                {deviation.baselineExcerpt ?? "No baseline excerpt available."}
-              </p>
-            </div>
-            <div className="rounded-md border border-border bg-surface-muted p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                Counterparty redline
-              </p>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
-                {deviation.counterpartyExcerpt ??
-                  "No counterparty excerpt available."}
-              </p>
-            </div>
+      <div className="mt-4 space-y-4">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-md border border-border bg-surface-muted p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Prior version
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
+              {deviation.baselineExcerpt ?? "No baseline excerpt available."}
+            </p>
           </div>
-
-          {deviation.approvedClauseText ? (
-            <div className="rounded-md border border-violet-200 bg-violet-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
-                Approved clause text
-              </p>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-violet-900">
-                {deviation.approvedClauseText}
-              </p>
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
-            {(["open", "accepted", "rejected", "resolved"] as const).map(
-              (status) => (
-                <button
-                  key={status}
-                  type="button"
-                  disabled={updating || deviation.status === status}
-                  onClick={() => void updateDeviation({ status })}
-                  className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-                >
-                  Mark {status}
-                </button>
-              ),
-            )}
+          <div className="rounded-md border border-border bg-surface-muted p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Counterparty redline
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
+              {deviation.counterpartyExcerpt ??
+                "No counterparty excerpt available."}
+            </p>
           </div>
-
-          <DeviationComments
-            contractId={contractId}
-            roundId={round.id}
-            deviationId={deviation.id}
-            comments={comments}
-            onCommentAdded={onUpdated}
-          />
         </div>
-      ) : null}
+
+        {deviation.approvedClauseText ? (
+          <div className="rounded-md border border-violet-200 bg-violet-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+              Approved clause text
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-violet-900">
+              {deviation.approvedClauseText}
+            </p>
+          </div>
+        ) : null}
+
+        <DeviationComments
+          contractId={contractId}
+          roundId={round.id}
+          deviationId={deviation.id}
+          comments={comments}
+          onCommentAdded={onUpdated}
+        />
+      </div>
     </article>
   );
 }
@@ -329,6 +257,7 @@ export function LegalReviewComparisonPanel({
   const [baselineAttachmentId, setBaselineAttachmentId] = useState("");
   const [counterpartyAttachmentId, setCounterpartyAttachmentId] = useState("");
   const [starting, setStarting] = useState(false);
+  const [downloadingRedline, setDownloadingRedline] = useState(false);
 
   const comparableAttachments = useMemo(
     () =>
@@ -466,6 +395,56 @@ export function LegalReviewComparisonPanel({
     }
   }
 
+  async function downloadRedline(roundId: string): Promise<void> {
+    setDownloadingRedline(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `/api/contracts/${contractId}/legal-review/${roundId}/redline/download`,
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { url?: string; fileName?: string; error?: string }
+        | null;
+
+      if (!response.ok || !payload?.url) {
+        throw new Error(payload?.error ?? "Unable to download redline document.");
+      }
+
+      const fileName = payload.fileName ?? "legal-review-redline.docx";
+      let downloadUrl = payload.url;
+
+      if (!payload.url.startsWith("data:")) {
+        const fileResponse = await fetch(payload.url);
+
+        if (!fileResponse.ok) {
+          throw new Error("Unable to download redline document.");
+        }
+
+        downloadUrl = URL.createObjectURL(await fileResponse.blob());
+      }
+
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      if (!payload.url.startsWith("data:")) {
+        URL.revokeObjectURL(downloadUrl);
+      }
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Unable to download redline document.",
+      );
+    } finally {
+      setDownloadingRedline(false);
+    }
+  }
+
   async function completeRound(roundId: string): Promise<void> {
     const response = await fetch(
       `/api/contracts/${contractId}/legal-review/${roundId}`,
@@ -569,6 +548,16 @@ export function LegalReviewComparisonPanel({
             >
               Re-run comparison
             </button>
+            {selectedRound.comparedAt && selectedRound.redlineDocument ? (
+              <button
+                type="button"
+                disabled={downloadingRedline}
+                onClick={() => void downloadRedline(selectedRound.id)}
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+              >
+                {downloadingRedline ? "Preparing redline..." : "Download redline"}
+              </button>
+            ) : null}
             {selectedRound.status === "open" ? (
               <button
                 type="button"
@@ -623,6 +612,11 @@ export function LegalReviewComparisonPanel({
                   </li>
                 ))}
               </ul>
+            ) : null}
+            {selectedRound.redlineDocument ? (
+              <p className="mt-3 text-xs text-text-secondary">
+                Redline document ready: {selectedRound.redlineDocument.fileName}
+              </p>
             ) : null}
           </div>
 

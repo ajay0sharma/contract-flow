@@ -9,6 +9,8 @@ import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { saveContractRecord } from "@/lib/contract-persistence";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
 import { compareDocumentTexts } from "@/lib/legal-review-comparison";
+import { persistLegalReviewRedlineDocument } from "@/lib/legal-review-redline-storage";
+import { captureException } from "@/lib/error-reporting";
 import type { ContractAttachment, ContractRecord } from "@/types/contract";
 import type {
   CreateLegalReviewCommentInput,
@@ -299,11 +301,37 @@ export async function compareLegalReviewRound(
     ...clauseDeviations,
     ...comparison.deviations,
   ]);
+  let redlineDocument = round.redlineDocument ?? null;
+  let comparisonSummary = comparison.summary;
+
+  try {
+    redlineDocument = await persistLegalReviewRedlineDocument({
+      organizationId,
+      contractId,
+      roundId: round.id,
+      roundNumber: round.roundNumber,
+      baselineFileName: round.baselineFileName,
+      counterpartyFileName: round.counterpartyFileName,
+      baselineText: baselineExtraction.text,
+      counterpartyText: counterpartyExtraction.text,
+      comparisonSummary: comparison.summary,
+      generatedByName: actor.name,
+    });
+  } catch (error) {
+    captureException(error, {
+      scope: "compareLegalReviewRound.redline",
+      contractId,
+      roundId: round.id,
+    });
+    comparisonSummary = `${comparison.summary} Redline document could not be generated.`;
+  }
+
   const updatedRound: LegalReviewRound = {
     ...round,
     comparedAt: new Date().toISOString(),
-    comparisonSummary: comparison.summary,
+    comparisonSummary,
     documentReadiness: [baselineReadiness, counterpartyReadiness],
+    redlineDocument,
     deviations,
   };
 
@@ -317,7 +345,9 @@ export async function compareLegalReviewRound(
       actorName: actor.name,
       actorEmail: actor.email,
       action: "Legal review comparison completed",
-      detail: `Round ${round.roundNumber} identified ${deviations.length} deviation${deviations.length === 1 ? "" : "s"}.`,
+      detail: redlineDocument
+        ? `Round ${round.roundNumber} identified ${deviations.length} deviation${deviations.length === 1 ? "" : "s"} and generated a downloadable redline document.`
+        : `Round ${round.roundNumber} identified ${deviations.length} deviation${deviations.length === 1 ? "" : "s"}. Redline document generation failed.`,
     },
   );
 

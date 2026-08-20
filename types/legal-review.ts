@@ -52,6 +52,15 @@ export interface LegalReviewComment {
   createdAt: string;
 }
 
+export interface LegalReviewRedlineDocument {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath?: string;
+  dataBase64?: string;
+  generatedAt: string;
+}
+
 export interface LegalReviewRound {
   id: string;
   roundNumber: number;
@@ -67,6 +76,7 @@ export interface LegalReviewRound {
   startedByEmail: string;
   comparedAt: string | null;
   comparisonSummary: string | null;
+  redlineDocument?: LegalReviewRedlineDocument | null;
   documentReadiness: LegalReviewDocumentReadiness[];
   deviations: LegalReviewDeviation[];
   comments: LegalReviewComment[];

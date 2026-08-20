@@ -265,6 +265,16 @@ export function buildContractAttachmentStoragePath(
   return `contracts/${organizationId}/${contractId}/attachments/${attachmentId}/${safeName}`;
 }
 
+export function buildLegalReviewRedlineStoragePath(
+  organizationId: string,
+  contractId: string,
+  roundId: string,
+  fileName: string,
+): string {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return `contracts/${organizationId}/${contractId}/legal-review/${roundId}/${safeName}`;
+}
+
 export async function uploadContractAttachment(
   storagePath: string,
   fileBuffer: Buffer,

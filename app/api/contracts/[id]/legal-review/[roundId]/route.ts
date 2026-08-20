@@ -8,6 +8,7 @@ import {
   completeLegalReviewRound,
   getLegalReviewRound,
 } from "@/lib/legal-review-store";
+import { sanitizeLegalReviewRoundForClient } from "@/lib/legal-review-redline-storage";
 
 export async function GET(
   _request: NextRequest,
@@ -33,7 +34,7 @@ export async function GET(
       return NextResponse.json({ error: "Review round not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ round });
+    return NextResponse.json({ round: sanitizeLegalReviewRoundForClient(round) });
   } catch (error) {
     reportError(error, {
       route: "GET /api/contracts/[id]/legal-review/[roundId]",
@@ -76,7 +77,7 @@ export async function POST(
         auth.actor,
       );
 
-      return NextResponse.json({ round });
+      return NextResponse.json({ round: sanitizeLegalReviewRoundForClient(round) });
     }
 
     const round = await compareLegalReviewRound(
@@ -86,7 +87,7 @@ export async function POST(
       auth.actor,
     );
 
-    return NextResponse.json({ round });
+    return NextResponse.json({ round: sanitizeLegalReviewRoundForClient(round) });
   } catch (error) {
     reportError(error, {
       route: "POST /api/contracts/[id]/legal-review/[roundId]",

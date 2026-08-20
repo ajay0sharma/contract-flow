@@ -14,6 +14,12 @@ export interface DocumentComparisonResult {
   summary: string;
 }
 
+export type RedlineAlignmentBlock =
+  | { kind: "unchanged"; text: string }
+  | { kind: "removed"; text: string }
+  | { kind: "added"; text: string }
+  | { kind: "modified"; baselineText: string; counterpartyText: string };
+
 interface TextBlock {
   index: number;
   text: string;
@@ -66,13 +72,6 @@ function similarity(left: string, right: string): number {
   return union === 0 ? 0 : intersection / union;
 }
 
-function truncateExcerpt(text: string, maxLength = 320): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-
-  return `${text.slice(0, maxLength - 1).trim()}…`;
-}
 
 function inferPriority(
   kind: LegalReviewDeviationKind,
@@ -155,15 +154,72 @@ function createDeviation(
           : "Counterparty edited existing language from the prior version."),
     priority,
     status: overrides?.status ?? "open",
-    baselineExcerpt: baselineExcerpt ? truncateExcerpt(baselineExcerpt) : null,
-    counterpartyExcerpt: counterpartyExcerpt
-      ? truncateExcerpt(counterpartyExcerpt)
-      : null,
+    baselineExcerpt: baselineExcerpt ?? null,
+    counterpartyExcerpt: counterpartyExcerpt ?? null,
     clauseId: overrides?.clauseId ?? null,
     clauseTitle: overrides?.clauseTitle ?? null,
     approvedClauseText: overrides?.approvedClauseText ?? null,
     createdAt,
   };
+}
+
+export function buildDocumentAlignment(
+  input: DocumentComparisonInput,
+): RedlineAlignmentBlock[] {
+  const baselineBlocks = splitIntoBlocks(input.baselineText);
+  const counterpartyBlocks = splitIntoBlocks(input.counterpartyText);
+  const alignment: RedlineAlignmentBlock[] = [];
+  const usedCounterparty = new Set<number>();
+
+  for (const baselineBlock of baselineBlocks) {
+    let bestIndex = -1;
+    let bestScore = 0;
+
+    for (const counterpartyBlock of counterpartyBlocks) {
+      if (usedCounterparty.has(counterpartyBlock.index)) {
+        continue;
+      }
+
+      const score = similarity(
+        baselineBlock.normalized,
+        counterpartyBlock.normalized,
+      );
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = counterpartyBlock.index;
+      }
+    }
+
+    if (bestIndex === -1 || bestScore < 0.55) {
+      alignment.push({ kind: "removed", text: baselineBlock.text });
+      continue;
+    }
+
+    usedCounterparty.add(bestIndex);
+    const counterpartyBlock = counterpartyBlocks[bestIndex]!;
+
+    if (bestScore >= 0.92) {
+      alignment.push({ kind: "unchanged", text: baselineBlock.text });
+      continue;
+    }
+
+    alignment.push({
+      kind: "modified",
+      baselineText: baselineBlock.text,
+      counterpartyText: counterpartyBlock.text,
+    });
+  }
+
+  for (const counterpartyBlock of counterpartyBlocks) {
+    if (usedCounterparty.has(counterpartyBlock.index)) {
+      continue;
+    }
+
+    alignment.push({ kind: "added", text: counterpartyBlock.text });
+  }
+
+  return alignment;
 }
 
 export function compareDocumentTexts(

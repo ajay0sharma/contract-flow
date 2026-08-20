@@ -27,6 +27,7 @@ import {
   sanitizeContractRecordForClient,
 } from "@/lib/contract-attachment-storage";
 import { compareDocumentTexts } from "@/lib/legal-review-comparison";
+import { generateRedlineDocx } from "@/lib/legal-review-redline";
 import {
   groupAttachmentsByVersion,
   normalizeContractAttachments,
@@ -1334,6 +1335,26 @@ function runLegalReviewUnitTests(): void {
   );
 }
 
+async function runLegalReviewRedlineUnitTests(): Promise<void> {
+  const buffer = await generateRedlineDocx({
+    roundNumber: 1,
+    baselineFileName: "baseline.docx",
+    counterpartyFileName: "counterparty.docx",
+    baselineText:
+      "Limitation of liability. Each party liability shall not exceed fees paid in twelve months.",
+    counterpartyText:
+      "Limitation of liability. Each party liability shall not exceed two times fees paid in twelve months.",
+    comparisonSummary: "1 deviation detected.",
+    generatedByName: "Legal Review",
+  });
+
+  assert(
+    "Redline docx generates a zip document",
+    buffer.length > 500 && buffer[0] === 0x50 && buffer[1] === 0x4b,
+    String(buffer.length),
+  );
+}
+
 async function main(): Promise<void> {
   console.log("ContractFlow contract flow tests\n");
 
@@ -1345,6 +1366,7 @@ async function main(): Promise<void> {
   runAttachmentStorageUnitTests();
   runAttachmentVersionUnitTests();
   runLegalReviewUnitTests();
+  await runLegalReviewRedlineUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();
   await runEmailConfigUnitTests();

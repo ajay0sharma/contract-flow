@@ -8,6 +8,7 @@ import {
   createLegalReviewRound,
   listLegalReviewRounds,
 } from "@/lib/legal-review-store";
+import { sanitizeLegalReviewRoundForClient } from "@/lib/legal-review-redline-storage";
 import type { CreateLegalReviewRoundInput } from "@/types/legal-review";
 
 export async function GET(
@@ -30,7 +31,9 @@ export async function GET(
   try {
     const rounds = await listLegalReviewRounds(contractId, organizationId);
 
-    return NextResponse.json({ rounds });
+    return NextResponse.json({
+      rounds: rounds.map(sanitizeLegalReviewRoundForClient),
+    });
   } catch (error) {
     reportError(error, {
       route: "GET /api/contracts/[id]/legal-review",
@@ -85,10 +88,10 @@ export async function POST(
           auth.actor,
         );
 
-        return NextResponse.json({ round: compared });
+        return NextResponse.json({ round: sanitizeLegalReviewRoundForClient(compared) });
       } catch (compareError) {
         return NextResponse.json({
-          round,
+          round: sanitizeLegalReviewRoundForClient(round),
           comparisonError:
             compareError instanceof Error
               ? compareError.message
@@ -97,7 +100,7 @@ export async function POST(
       }
     }
 
-    return NextResponse.json({ round });
+    return NextResponse.json({ round: sanitizeLegalReviewRoundForClient(round) });
   } catch (error) {
     reportError(error, {
       route: "POST /api/contracts/[id]/legal-review",
