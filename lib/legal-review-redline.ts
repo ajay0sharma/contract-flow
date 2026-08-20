@@ -3,6 +3,7 @@ import {
   buildDocumentAlignment,
   type RedlineAlignmentBlock,
 } from "@/lib/legal-review-comparison";
+import { diffWords, type WordDiffPart } from "@/lib/legal-review-text-diff";
 
 export interface GenerateRedlineDocxInput {
   roundNumber: number;
@@ -14,11 +15,6 @@ export interface GenerateRedlineDocxInput {
   generatedByName: string;
 }
 
-interface WordDiffPart {
-  kind: "equal" | "delete" | "insert";
-  text: string;
-}
-
 function escapeXml(value: string): string {
   return value
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
@@ -26,64 +22,6 @@ function escapeXml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function splitWords(text: string): string[] {
-  return text.match(/\S+|\s+/g) ?? [text];
-}
-
-function diffWords(baselineText: string, counterpartyText: string): WordDiffPart[] {
-  const left = splitWords(baselineText);
-  const right = splitWords(counterpartyText);
-  const rows = left.length + 1;
-  const cols = right.length + 1;
-  const lengths = Array.from({ length: rows }, () => Array<number>(cols).fill(0));
-
-  for (let row = rows - 2; row >= 0; row -= 1) {
-    for (let col = cols - 2; col >= 0; col -= 1) {
-      if (left[row] === right[col]) {
-        lengths[row]![col] = lengths[row + 1]![col + 1]! + 1;
-      } else {
-        lengths[row]![col] = Math.max(
-          lengths[row + 1]![col]!,
-          lengths[row]![col + 1]!,
-        );
-      }
-    }
-  }
-
-  const parts: WordDiffPart[] = [];
-  let row = 0;
-  let col = 0;
-
-  while (row < left.length && col < right.length) {
-    if (left[row] === right[col]) {
-      parts.push({ kind: "equal", text: left[row]! });
-      row += 1;
-      col += 1;
-      continue;
-    }
-
-    if (lengths[row + 1]?.[col]! >= lengths[row]?.[col + 1]!) {
-      parts.push({ kind: "delete", text: left[row]! });
-      row += 1;
-    } else {
-      parts.push({ kind: "insert", text: right[col]! });
-      col += 1;
-    }
-  }
-
-  while (row < left.length) {
-    parts.push({ kind: "delete", text: left[row]! });
-    row += 1;
-  }
-
-  while (col < right.length) {
-    parts.push({ kind: "insert", text: right[col]! });
-    col += 1;
-  }
-
-  return parts;
 }
 
 function revisionTimestamp(): string {

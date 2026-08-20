@@ -26,6 +26,16 @@ const PRIORITY_STYLES: Record<
   low: "bg-slate-100 text-slate-700",
 };
 
+function isRedlineDownloadReady(round: LegalReviewRound): boolean {
+  if (!round.comparedAt || !round.redlineDocument) {
+    return false;
+  }
+
+  return !round.comparisonSummary?.includes(
+    "Redline document could not be generated",
+  );
+}
+
 function DeviationComments({
   contractId,
   roundId,
@@ -548,7 +558,7 @@ export function LegalReviewComparisonPanel({
             >
               Re-run comparison
             </button>
-            {selectedRound.comparedAt && selectedRound.redlineDocument ? (
+            {isRedlineDownloadReady(selectedRound) ? (
               <button
                 type="button"
                 disabled={downloadingRedline}
@@ -613,16 +623,25 @@ export function LegalReviewComparisonPanel({
                 ))}
               </ul>
             ) : null}
-            {selectedRound.redlineDocument ? (
+            {isRedlineDownloadReady(selectedRound) ? (
               <p className="mt-3 text-xs text-text-secondary">
-                Redline document ready: {selectedRound.redlineDocument.fileName}
+                Redline document ready: {selectedRound.redlineDocument!.fileName}
+              </p>
+            ) : selectedRound.comparedAt &&
+              selectedRound.comparisonSummary?.includes(
+                "Redline document could not be generated",
+              ) ? (
+              <p className="mt-3 text-xs text-amber-700">
+                Redline document could not be generated for this comparison run.
               </p>
             ) : null}
           </div>
 
           {selectedRound.deviations.length === 0 ? (
             <p className="text-sm text-text-muted">
-              No deviations logged yet for this round.
+              {selectedRound.comparedAt
+                ? "No material deviations were detected for this round."
+                : "Comparison has not been run yet for this round."}
             </p>
           ) : (
             selectedRound.deviations.map((deviation) => (

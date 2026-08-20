@@ -1,4 +1,5 @@
 import { config } from "dotenv";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   filterContractRecords,
@@ -26,8 +27,16 @@ import {
   sanitizeAttachmentForClient,
   sanitizeContractRecordForClient,
 } from "@/lib/contract-attachment-storage";
-import { compareDocumentTexts } from "@/lib/legal-review-comparison";
+import {
+  buildDocumentAlignment,
+  compareDocumentTexts,
+} from "@/lib/legal-review-comparison";
 import { generateRedlineDocx } from "@/lib/legal-review-redline";
+import {
+  blocksAreEquivalent,
+  hasMaterialTextChange,
+} from "@/lib/legal-review-text-diff";
+import { extractTextFromDocument } from "@/lib/obligation-document-text";
 import {
   groupAttachmentsByVersion,
   normalizeContractAttachments,
@@ -1333,6 +1342,135 @@ function runLegalReviewUnitTests(): void {
     comparison.summary.includes("deviation"),
     comparison.summary,
   );
+
+  const liabilityBaseline =
+    "Limitation of Liability. Except for excluded liabilities, each party's aggregate liability arising out of or related to this Agreement shall not exceed the total fees paid or payable by Customer to Vendor in the twelve (12) months preceding the event giving rise to the claim.";
+  const liabilityCounterparty =
+    "Limitation of Liability. Except for excluded liabilities, each party's aggregate liability arising out of or related to this Agreement shall not exceed two times (2x) the total fees paid or payable by Customer to Vendor in the twelve (12) months preceding the event giving rise to the claim.";
+
+  assert(
+    "High-similarity liability cap edits are treated as material",
+    hasMaterialTextChange(liabilityBaseline, liabilityCounterparty),
+    "liability cap change was treated as unchanged",
+  );
+
+  assert(
+    "High-similarity liability cap blocks are not equivalent",
+    !blocksAreEquivalent(liabilityBaseline, liabilityCounterparty),
+    "liability cap blocks were treated as equivalent",
+  );
+
+  const shortClauseComparison = compareDocumentTexts({
+    baselineText: "Fees: $100 per month.",
+    counterpartyText: "Fees: $200 per month.",
+  });
+
+  assert(
+    "Short fee clauses are still compared",
+    shortClauseComparison.deviations.some((item) => item.kind === "modified"),
+    JSON.stringify(shortClauseComparison),
+  );
+
+  const pageNoiseComparison = compareDocumentTexts({
+    baselineText:
+      "Limitation of Liability. Each party's aggregate liability shall not exceed fees paid in twelve months. Page 1 of 10",
+    counterpartyText:
+      "Limitation of Liability. Each party's aggregate liability shall not exceed fees paid in twelve months. Page 2 of 10",
+  });
+
+  assert(
+    "Page-number extraction noise is not treated as a material edit",
+    pageNoiseComparison.deviations.length === 0,
+    JSON.stringify(pageNoiseComparison),
+  );
+}
+
+async function runLegalReviewFixtureUnitTests(): Promise<void> {
+  const baselineBuffer = readFileSync(
+    resolve("scripts/fixtures/legal-review/northwind-baseline-v1.docx"),
+  );
+  const counterpartyBuffer = readFileSync(
+    resolve("scripts/fixtures/legal-review/northwind-counterparty-v2.docx"),
+  );
+
+  const baselineText = (
+    await extractTextFromDocument(baselineBuffer, "northwind-baseline-v1.docx")
+  ).trim();
+  const counterpartyText = (
+    await extractTextFromDocument(
+      counterpartyBuffer,
+      "northwind-counterparty-v2.docx",
+    )
+  ).trim();
+
+  const comparison = compareDocumentTexts({
+    baselineText,
+    counterpartyText,
+  });
+
+  assert(
+    "Northwind fixtures detect liability, termination, and payment edits",
+    comparison.deviations.filter((item) => item.kind === "modified").length === 3,
+    JSON.stringify(
+      comparison.deviations.map((item) => ({
+        kind: item.kind,
+        title: item.title,
+        summary: item.summary,
+      })),
+    ),
+  );
+
+  assert(
+    "Northwind liability cap deviation is flagged despite high similarity",
+    comparison.deviations.some(
+      (item) =>
+        item.kind === "modified" &&
+        /liabilit/i.test(item.title) &&
+        /numeric|term value/i.test(item.summary),
+    ),
+    JSON.stringify(comparison.deviations),
+  );
+
+  const alignment = buildDocumentAlignment({
+    baselineText,
+    counterpartyText,
+  });
+
+  assert(
+    "Northwind redline alignment marks liability block as modified",
+    alignment.some(
+      (block) =>
+        block.kind === "modified" &&
+        /liabilit/i.test(block.baselineText) &&
+        /2x|two times/i.test(block.counterpartyText),
+    ),
+    JSON.stringify(alignment.map((block) => block.kind)),
+  );
+
+  const buffer = await generateRedlineDocx({
+    roundNumber: 1,
+    baselineFileName: "northwind-baseline-v1.docx",
+    counterpartyFileName: "northwind-counterparty-v2.docx",
+    baselineText,
+    counterpartyText,
+    comparisonSummary: comparison.summary,
+    generatedByName: "Legal Review",
+  });
+
+  const zip = await JSZip.loadAsync(buffer);
+  const documentXml = await zip.file("word/document.xml")!.async("string");
+
+  assert(
+    "Northwind redline docx includes track changes",
+    documentXml.includes("<w:ins") && documentXml.includes("<w:del"),
+    documentXml.slice(0, 500),
+  );
+
+  assert(
+    "Northwind redline docx marks liability cap insertion",
+    /two times|\(2x\)/i.test(documentXml),
+    documentXml.slice(0, 500),
+  );
 }
 
 async function runLegalReviewRedlineUnitTests(): Promise<void> {
@@ -1366,6 +1504,7 @@ async function main(): Promise<void> {
   runAttachmentStorageUnitTests();
   runAttachmentVersionUnitTests();
   runLegalReviewUnitTests();
+  await runLegalReviewFixtureUnitTests();
   await runLegalReviewRedlineUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();

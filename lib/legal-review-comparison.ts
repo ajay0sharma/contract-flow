@@ -1,3 +1,7 @@
+import {
+  blocksAreEquivalent,
+  summarizeMaterialChange,
+} from "@/lib/legal-review-text-diff";
 import type {
   LegalReviewDeviation,
   LegalReviewDeviationKind,
@@ -30,7 +34,7 @@ function splitIntoBlocks(text: string): TextBlock[] {
   return text
     .split(/\n\s*\n/)
     .map((entry) => entry.replace(/\s+/g, " ").trim())
-    .filter((entry) => entry.length >= 24)
+    .filter((entry) => entry.length >= 12)
     .map((entry, index) => ({
       index,
       text: entry,
@@ -199,7 +203,7 @@ export function buildDocumentAlignment(
     usedCounterparty.add(bestIndex);
     const counterpartyBlock = counterpartyBlocks[bestIndex]!;
 
-    if (bestScore >= 0.92) {
+    if (blocksAreEquivalent(baselineBlock.text, counterpartyBlock.text)) {
       alignment.push({ kind: "unchanged", text: baselineBlock.text });
       continue;
     }
@@ -261,7 +265,7 @@ export function compareDocumentTexts(
     usedCounterparty.add(bestIndex);
     const counterpartyBlock = counterpartyBlocks[bestIndex]!;
 
-    if (bestScore >= 0.92) {
+    if (blocksAreEquivalent(baselineBlock.text, counterpartyBlock.text)) {
       continue;
     }
 
@@ -272,7 +276,11 @@ export function compareDocumentTexts(
         counterpartyBlock.text,
         createdAt,
         {
-          summary: `Similarity dropped to ${Math.round(bestScore * 100)}% between the prior and counterparty versions.`,
+          summary: summarizeMaterialChange(
+            baselineBlock.text,
+            counterpartyBlock.text,
+            bestScore,
+          ),
         },
       ),
     );

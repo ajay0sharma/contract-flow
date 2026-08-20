@@ -323,6 +323,7 @@ export async function compareLegalReviewRound(
       contractId,
       roundId: round.id,
     });
+    redlineDocument = null;
     comparisonSummary = `${comparison.summary} Redline document could not be generated.`;
   }
 
