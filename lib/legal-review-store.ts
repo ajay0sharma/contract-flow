@@ -1,6 +1,7 @@
 import { recordContractAuditLog } from "@/lib/audit-log";
 import {
   buildDocumentReadiness,
+  extractComparableAttachmentStructure,
   extractComparableAttachmentText,
 } from "@/lib/contract-attachment-text";
 import { recordClauseDeviationUsage } from "@/lib/clause-usage-store";
@@ -8,7 +9,12 @@ import { detectClauseDeviations } from "@/lib/clause-deviation-detector";
 import { loadMergedContractRecord } from "@/lib/contract-list-service";
 import { saveContractRecord } from "@/lib/contract-persistence";
 import { allowMemoryPersistence } from "@/lib/persistence-mode";
-import { compareDocumentTexts } from "@/lib/legal-review-comparison";
+import { buildLegalReviewComparisonSummary } from "@/lib/legal-review-compare-view";
+import { compareDocumentTexts, buildDocumentAlignment } from "@/lib/legal-review-comparison";
+import {
+  buildStructuralAlignmentBlocks,
+  compareDocumentStructures,
+} from "@/lib/legal-review-structure-diff";
 import { persistLegalReviewRedlineDocument } from "@/lib/legal-review-redline-storage";
 import { captureException } from "@/lib/error-reporting";
 import type { ContractAttachment, ContractRecord } from "@/types/contract";
@@ -19,6 +25,7 @@ import type {
   LegalReviewDeviation,
   LegalReviewRound,
   UpdateLegalReviewDeviationInput,
+  BulkUpdateLegalReviewDeviationsInput,
 } from "@/types/legal-review";
 
 function createId(prefix: string): string {
@@ -278,6 +285,10 @@ export async function compareLegalReviewRound(
     baselineText: baselineExtraction.text,
     counterpartyText: counterpartyExtraction.text,
   });
+  const textAlignment = buildDocumentAlignment({
+    baselineText: baselineExtraction.text,
+    counterpartyText: counterpartyExtraction.text,
+  });
   const clauseDeviations = await detectClauseDeviations({
     organizationId,
     contractType: contract.contractType,
@@ -297,12 +308,26 @@ export async function compareLegalReviewRound(
     }
   }
 
+  const baselineStructure = await extractComparableAttachmentStructure(baseline);
+  const counterpartyStructure = await extractComparableAttachmentStructure(
+    counterparty,
+  );
+  const structuralComparison = compareDocumentStructures(
+    baselineStructure,
+    counterpartyStructure,
+    [...clauseDeviations, ...comparison.deviations],
+  );
   const deviations = mergeExistingDeviationState(round.deviations, [
     ...clauseDeviations,
     ...comparison.deviations,
+    ...structuralComparison.deviations,
   ]);
+  const documentAlignment = [
+    ...textAlignment,
+    ...buildStructuralAlignmentBlocks(structuralComparison.deviations),
+  ];
   let redlineDocument = round.redlineDocument ?? null;
-  let comparisonSummary = comparison.summary;
+  let comparisonSummary = buildLegalReviewComparisonSummary(deviations);
 
   try {
     redlineDocument = await persistLegalReviewRedlineDocument({
@@ -314,7 +339,7 @@ export async function compareLegalReviewRound(
       counterpartyFileName: round.counterpartyFileName,
       baselineText: baselineExtraction.text,
       counterpartyText: counterpartyExtraction.text,
-      comparisonSummary: comparison.summary,
+      comparisonSummary,
       generatedByName: actor.name,
     });
   } catch (error) {
@@ -324,7 +349,7 @@ export async function compareLegalReviewRound(
       roundId: round.id,
     });
     redlineDocument = null;
-    comparisonSummary = `${comparison.summary} Redline document could not be generated.`;
+    comparisonSummary = `${comparisonSummary} Redline document could not be generated.`;
   }
 
   const updatedRound: LegalReviewRound = {
@@ -332,6 +357,7 @@ export async function compareLegalReviewRound(
     comparedAt: new Date().toISOString(),
     comparisonSummary,
     documentReadiness: [baselineReadiness, counterpartyReadiness],
+    documentAlignment,
     redlineDocument,
     deviations,
   };
@@ -395,6 +421,52 @@ export async function updateLegalReviewDeviation(
   await persistRounds({ ...contract, legalReviewRounds: rounds }, organizationId, rounds);
 
   return updatedDeviation;
+}
+
+export async function bulkUpdateLegalReviewDeviations(
+  contractId: string,
+  organizationId: string,
+  roundId: string,
+  input: BulkUpdateLegalReviewDeviationsInput,
+): Promise<LegalReviewDeviation[]> {
+  const contract = await loadContractForReview(contractId, organizationId);
+
+  if (!contract) {
+    throw new Error("Contract not found.");
+  }
+
+  const rounds = parseLegalReviewRounds(contract.legalReviewRounds);
+  const roundIndex = rounds.findIndex((item) => item.id === roundId);
+
+  if (roundIndex === -1) {
+    throw new Error("Legal review round not found.");
+  }
+
+  const round = rounds[roundIndex]!;
+  const targetIds =
+    input.deviationIds && input.deviationIds.length > 0
+      ? new Set(input.deviationIds)
+      : null;
+
+  const updatedDeviations = round.deviations.map((deviation) => {
+    if (targetIds && !targetIds.has(deviation.id)) {
+      return deviation;
+    }
+
+    return {
+      ...deviation,
+      status: input.status,
+    };
+  });
+
+  round.deviations = updatedDeviations;
+  rounds[roundIndex] = round;
+
+  await persistRounds({ ...contract, legalReviewRounds: rounds }, organizationId, rounds);
+
+  return updatedDeviations.filter((deviation) =>
+    targetIds ? targetIds.has(deviation.id) : true,
+  );
 }
 
 export async function addLegalReviewComment(

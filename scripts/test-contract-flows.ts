@@ -31,11 +31,35 @@ import {
   buildDocumentAlignment,
   compareDocumentTexts,
 } from "@/lib/legal-review-comparison";
+import {
+  buildCompareSummaryLine,
+  buildLegalReviewComparisonSummary,
+  computeChangeStatistics,
+} from "@/lib/legal-review-compare-view";
+import {
+  buildChangeLogFileName,
+  generateChangeLogCsv,
+} from "@/lib/legal-review-change-log";
+import {
+  buildCleanReviewFileName,
+  generateCleanReviewDocx,
+} from "@/lib/legal-review-clean-docx";
+import { computeReviewStatistics } from "@/lib/legal-review-review-stats";
+import {
+  buildRedlineHtmlFileName,
+  generateRedlineHtml,
+} from "@/lib/legal-review-redline-html";
+import {
+  buildRedlinePdfFileName,
+  generateRedlinePdf,
+} from "@/lib/legal-review-redline-pdf";
 import { generateRedlineDocx } from "@/lib/legal-review-redline";
 import {
   blocksAreEquivalent,
   hasMaterialTextChange,
 } from "@/lib/legal-review-text-diff";
+import { extractDocxStructure } from "@/lib/legal-review-docx-structure";
+import { compareDocumentStructures } from "@/lib/legal-review-structure-diff";
 import { extractTextFromDocument } from "@/lib/obligation-document-text";
 import {
   groupAttachmentsByVersion,
@@ -1383,6 +1407,47 @@ function runLegalReviewUnitTests(): void {
     pageNoiseComparison.deviations.length === 0,
     JSON.stringify(pageNoiseComparison),
   );
+
+  const moveBaseline =
+    "Introductory paragraph for the agreement between the parties.\n\nInsurance coverage shall be maintained at all times during the term of this agreement.\n\nClosing paragraph regarding notices and general provisions.";
+  const moveCounterparty =
+    "Introductory paragraph for the agreement between the parties.\n\nClosing paragraph regarding notices and general provisions.\n\nInsurance coverage shall be maintained at all times during the term of this agreement.";
+
+  const moveComparison = compareDocumentTexts({
+    baselineText: moveBaseline,
+    counterpartyText: moveCounterparty,
+  });
+
+  assert(
+    "Relocated sections are grouped as moved deviations",
+    moveComparison.deviations.some((item) => item.kind === "moved"),
+    JSON.stringify(moveComparison.deviations.map((item) => item.kind)),
+  );
+
+  const moveAlignment = buildDocumentAlignment({
+    baselineText: moveBaseline,
+    counterpartyText: moveCounterparty,
+  });
+
+  assert(
+    "Relocated sections annotate alignment blocks for redline export",
+    moveAlignment.some((block) => block.kind === "moved"),
+    JSON.stringify(moveAlignment.map((block) => block.kind)),
+  );
+
+  const moveStats = computeChangeStatistics(moveComparison.deviations);
+
+  assert(
+    "Compare statistics count relocated changes",
+    moveStats.moved >= 1,
+    JSON.stringify(moveStats),
+  );
+
+  assert(
+    "Compare summary line includes relocation counts",
+    buildCompareSummaryLine(moveStats).includes("relocation"),
+    buildCompareSummaryLine(moveStats),
+  );
 }
 
 async function runLegalReviewFixtureUnitTests(): Promise<void> {
@@ -1473,6 +1538,320 @@ async function runLegalReviewFixtureUnitTests(): Promise<void> {
   );
 }
 
+async function runLegalReviewLiteraParityUnitTests(): Promise<void> {
+  const comparison = compareDocumentTexts({
+    baselineText:
+      "Intro paragraph for the agreement.\n\nInsurance coverage shall be maintained during the term.\n\nPayment is due within thirty days.",
+    counterpartyText:
+      "Intro paragraph for the agreement.\n\nPayment is due within forty-five days.\n\nInsurance coverage shall be maintained during the term.",
+  });
+  const alignment = buildDocumentAlignment({
+    baselineText:
+      "Intro paragraph for the agreement.\n\nInsurance coverage shall be maintained during the term.\n\nPayment is due within thirty days.",
+    counterpartyText:
+      "Intro paragraph for the agreement.\n\nPayment is due within forty-five days.\n\nInsurance coverage shall be maintained during the term.",
+  });
+
+  assert(
+    "Litera parity detects relocated sections in alignment",
+    alignment.some((block) => block.kind === "moved"),
+    JSON.stringify(alignment.map((block) => block.kind)),
+  );
+
+  const reviewStats = computeReviewStatistics(comparison.deviations);
+  assert(
+    "Review statistics start with all changes open",
+    reviewStats.open === comparison.deviations.length,
+    JSON.stringify(reviewStats),
+  );
+
+  const reviewed = comparison.deviations.map((deviation, index) => ({
+    ...deviation,
+    status: index === 0 ? ("accepted" as const) : deviation.status,
+  }));
+  const partialReviewStats = computeReviewStatistics(reviewed);
+
+  assert(
+    "Review statistics track accepted changes",
+    partialReviewStats.accepted === 1 && partialReviewStats.percentComplete > 0,
+    JSON.stringify(partialReviewStats),
+  );
+
+  const round = {
+    id: "round-test",
+    roundNumber: 2,
+    status: "open" as const,
+    versionGroupId: null,
+    baselineAttachmentId: "b1",
+    counterpartyAttachmentId: "c1",
+    baselineFileName: "baseline.docx",
+    counterpartyFileName: "counterparty.docx",
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    startedByName: "Legal Review",
+    startedByEmail: "legal@example.com",
+    comparedAt: new Date().toISOString(),
+    comparisonSummary: comparison.summary,
+    documentAlignment: alignment,
+    deviations: reviewed,
+    comments: [],
+    documentReadiness: [],
+  };
+
+  const csv = generateChangeLogCsv(round);
+  assert(
+    "Change log CSV includes deviation headers and rows",
+    csv.includes("Change Number") &&
+      csv.split("\n").length > comparison.deviations.length,
+    csv.slice(0, 200),
+  );
+  assert(
+    "Change log file name follows round naming convention",
+    buildChangeLogFileName(2) === "legal-review-round-2-change-log.csv",
+    buildChangeLogFileName(2),
+  );
+
+  const html = generateRedlineHtml({
+    roundNumber: 2,
+    baselineFileName: round.baselineFileName,
+    counterpartyFileName: round.counterpartyFileName,
+    comparisonSummary: comparison.summary,
+    alignment,
+  });
+  assert(
+    "HTML redline export includes styled insertions and deletions",
+    html.includes("<ins>") || html.includes("<del>") || html.includes("class=\"modified\""),
+    html.slice(0, 300),
+  );
+  assert(
+    "HTML redline file name follows round naming convention",
+    buildRedlineHtmlFileName(2) === "legal-review-round-2-redline.html",
+    buildRedlineHtmlFileName(2),
+  );
+
+  const pdfBuffer = await generateRedlinePdf({
+    roundNumber: 2,
+    baselineFileName: round.baselineFileName,
+    counterpartyFileName: round.counterpartyFileName,
+    comparisonSummary: comparison.summary,
+    alignment,
+  });
+  assert(
+    "PDF redline export generates a PDF document",
+    pdfBuffer.length > 500 &&
+      pdfBuffer[0] === 0x25 &&
+      pdfBuffer[1] === 0x50 &&
+      pdfBuffer[2] === 0x44 &&
+      pdfBuffer[3] === 0x46,
+    String(pdfBuffer.length),
+  );
+  assert(
+    "PDF redline file name follows round naming convention",
+    buildRedlinePdfFileName(2) === "legal-review-round-2-redline.pdf",
+    buildRedlinePdfFileName(2),
+  );
+
+  const cleanBuffer = await generateCleanReviewDocx({
+    roundNumber: 2,
+    baselineFileName: round.baselineFileName,
+    counterpartyFileName: round.counterpartyFileName,
+    alignment,
+    deviations: reviewed,
+  });
+  const cleanZip = await JSZip.loadAsync(cleanBuffer);
+  const cleanXml = await cleanZip.file("word/document.xml")!.async("string");
+  assert(
+    "Clean draft DOCX is generated from review decisions",
+    cleanXml.includes("Clean agreement draft") && cleanBuffer[0] === 0x50,
+    cleanXml.slice(0, 200),
+  );
+  assert(
+    "Clean draft file name follows round naming convention",
+    buildCleanReviewFileName(2) === "legal-review-round-2-clean-draft.docx",
+    buildCleanReviewFileName(2),
+  );
+
+  assert(
+    "Compare summary line still renders change counts",
+    buildCompareSummaryLine(computeChangeStatistics(comparison.deviations)).length >
+      0,
+    buildCompareSummaryLine(computeChangeStatistics(comparison.deviations)),
+  );
+}
+
+async function createStructureTestDocx(options: {
+  boldLimitation?: boolean;
+  feeAmount?: string;
+  includeImage?: boolean;
+  footnoteText?: string;
+}): Promise<Buffer> {
+  const limitationRun = options.boldLimitation
+    ? "<w:r><w:rPr><w:b/></w:rPr><w:t>Limitation of Liability cap equals one times annual fees.</w:t></w:r>"
+    : "<w:r><w:t>Limitation of Liability cap equals one times annual fees.</w:t></w:r>";
+  const imageParagraph = options.includeImage
+    ? `<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><wp:docPr descr="Company Logo" name="Picture 1"/><a:graphic/></wp:inline></w:drawing></w:r></w:p>`
+    : "";
+  const footnoteReference = options.footnoteText
+    ? `<w:p><w:r><w:t>Payment terms apply.</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r></w:p>`
+    : "";
+  const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>${limitationRun}</w:p>
+    <w:tbl>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Fee Cap</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>${options.feeAmount ?? "100000"}</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Term</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>12 months</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    ${imageParagraph}
+    ${footnoteReference}
+  </w:body>
+</w:document>`;
+  const footnotesXml = options.footnoteText
+    ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:footnote w:id="1"><w:p><w:r><w:t>${options.footnoteText}</w:t></w:r></w:p></w:footnote>
+</w:footnotes>`
+    : undefined;
+
+  const zip = new JSZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>${footnotesXml ? `<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>` : ""}
+</Types>`,
+  );
+  zip.file(
+    "_rels/.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+  );
+  zip.file(
+    "word/_rels/document.xml.rels",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>
+</Relationships>`,
+  );
+  zip.file("word/document.xml", documentXml);
+  if (footnotesXml) {
+    zip.file("word/footnotes.xml", footnotesXml);
+  }
+
+  return zip.generateAsync({ type: "nodebuffer" });
+}
+
+async function runLegalReviewStructureUnitTests(): Promise<void> {
+  const baselineBuffer = await createStructureTestDocx({
+    boldLimitation: true,
+    feeAmount: "100000",
+    includeImage: true,
+    footnoteText: "Prior footnote references schedule A payment obligations.",
+  });
+  const counterpartyBuffer = await createStructureTestDocx({
+    boldLimitation: false,
+    feeAmount: "150000",
+    includeImage: false,
+    footnoteText: "Updated footnote references schedule A and late payment penalties.",
+  });
+
+  const baselineStructure = await extractDocxStructure(baselineBuffer, "baseline.docx");
+  const counterpartyStructure = await extractDocxStructure(
+    counterpartyBuffer,
+    "counterparty.docx",
+  );
+
+  assert(
+    "DOCX structure extractor finds tables and footnotes",
+    Boolean(
+      baselineStructure &&
+        baselineStructure.blocks.some((block) => block.kind === "table") &&
+        baselineStructure.footnotes.length === 1,
+    ),
+    JSON.stringify(baselineStructure),
+  );
+
+  const structural = compareDocumentStructures(
+    baselineStructure,
+    counterpartyStructure,
+  );
+
+  assert(
+    "Structure diff detects formatting changes",
+    structural.deviations.some((item) => item.kind === "formatting_change"),
+    JSON.stringify(structural.deviations.map((item) => item.kind)),
+  );
+  assert(
+    "Structure diff detects table changes",
+    structural.deviations.some((item) => item.kind === "table_change"),
+    JSON.stringify(structural.deviations.map((item) => item.kind)),
+  );
+  assert(
+    "Structure diff detects image changes",
+    structural.deviations.some((item) => item.kind === "image_change"),
+    JSON.stringify(structural.deviations.map((item) => item.kind)),
+  );
+  assert(
+    "Structure diff detects footnote changes",
+    structural.deviations.some((item) => item.kind === "footnote_change"),
+    JSON.stringify(structural.deviations.map((item) => item.kind)),
+  );
+
+  const stats = computeChangeStatistics(structural.deviations);
+  assert(
+    "Change statistics include structural categories",
+    stats.formatting >= 1 &&
+      stats.tables >= 1 &&
+      stats.images >= 1 &&
+      stats.footnotes >= 1,
+    JSON.stringify(stats),
+  );
+
+  const baselineText = (
+    await extractTextFromDocument(baselineBuffer, "baseline.docx")
+  ).trim();
+  const counterpartyText = (
+    await extractTextFromDocument(counterpartyBuffer, "counterparty.docx")
+  ).trim();
+  const textComparison = compareDocumentTexts({
+    baselineText,
+    counterpartyText,
+  });
+
+  assert(
+    "Text comparison coalesces short table cells into comparable blocks",
+    textComparison.deviations.some(
+      (item) =>
+        item.kind === "modified" &&
+        /100000|150000/.test(
+          `${item.baselineExcerpt ?? ""} ${item.counterpartyExcerpt ?? ""}`,
+        ),
+    ),
+    JSON.stringify(textComparison.deviations),
+  );
+
+  const combinedSummary = buildLegalReviewComparisonSummary([
+    ...textComparison.deviations,
+    ...structural.deviations,
+  ]);
+  assert(
+    "Combined comparison summary includes structural change categories",
+    combinedSummary.includes("formatting change") &&
+      combinedSummary.includes("table change"),
+    combinedSummary,
+  );
+}
+
 async function runLegalReviewRedlineUnitTests(): Promise<void> {
   const buffer = await generateRedlineDocx({
     roundNumber: 1,
@@ -1505,6 +1884,8 @@ async function main(): Promise<void> {
   runAttachmentVersionUnitTests();
   runLegalReviewUnitTests();
   await runLegalReviewFixtureUnitTests();
+  await runLegalReviewLiteraParityUnitTests();
+  await runLegalReviewStructureUnitTests();
   await runLegalReviewRedlineUnitTests();
   await runTemplateMergeUnitTests();
   await runTemplatePersistenceTests();

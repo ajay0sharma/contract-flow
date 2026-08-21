@@ -4,7 +4,48 @@ export type LegalReviewDeviationKind =
   | "modified"
   | "added"
   | "removed"
+  | "moved"
+  | "formatting_change"
+  | "table_change"
+  | "image_change"
+  | "footnote_change"
   | "clause_deviation";
+
+export interface LegalReviewChangeStatistics {
+  total: number;
+  modified: number;
+  added: number;
+  removed: number;
+  moved: number;
+  formatting: number;
+  tables: number;
+  images: number;
+  footnotes: number;
+  clauseDeviations: number;
+  priority: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+}
+
+export interface LegalReviewReviewStatistics {
+  open: number;
+  accepted: number;
+  rejected: number;
+  resolved: number;
+  reviewed: number;
+  total: number;
+  percentComplete: number;
+}
+
+export type LegalReviewAlignmentBlock =
+  | { kind: "unchanged"; text: string }
+  | { kind: "removed"; text: string; movedTo?: string }
+  | { kind: "added"; text: string; movedFrom?: string }
+  | { kind: "modified"; baselineText: string; counterpartyText: string }
+  | { kind: "moved"; baselineText: string; counterpartyText: string };
 
 export type LegalReviewDeviationPriority =
   | "critical"
@@ -77,6 +118,7 @@ export interface LegalReviewRound {
   comparedAt: string | null;
   comparisonSummary: string | null;
   redlineDocument?: LegalReviewRedlineDocument | null;
+  documentAlignment?: LegalReviewAlignmentBlock[] | null;
   documentReadiness: LegalReviewDocumentReadiness[];
   deviations: LegalReviewDeviation[];
   comments: LegalReviewComment[];
@@ -90,6 +132,11 @@ export interface CreateLegalReviewRoundInput {
 export interface UpdateLegalReviewDeviationInput {
   status?: LegalReviewDeviationStatus;
   priority?: LegalReviewDeviationPriority;
+}
+
+export interface BulkUpdateLegalReviewDeviationsInput {
+  deviationIds?: string[];
+  status: LegalReviewDeviationStatus;
 }
 
 export interface CreateLegalReviewCommentInput {

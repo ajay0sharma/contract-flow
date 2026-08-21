@@ -3,6 +3,7 @@ import {
   validateExtractedText,
 } from "@/lib/obligation-document-text";
 import { loadAttachmentBuffer } from "@/lib/contract-attachment-storage";
+import { extractDocxStructure, type StructuredDocument } from "@/lib/legal-review-docx-structure";
 import type { ContractAttachment } from "@/types/contract";
 import type { LegalReviewDocumentReadiness } from "@/types/legal-review";
 
@@ -50,6 +51,26 @@ export async function extractComparableAttachmentText(
           : `Unable to extract text from ${attachment.fileName}.`,
     };
   }
+}
+
+export async function extractComparableAttachmentStructure(
+  attachment: ContractAttachment,
+): Promise<StructuredDocument | null> {
+  if (!isComparableAttachment(attachment)) {
+    return null;
+  }
+
+  const extension = attachment.fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (extension !== "docx") {
+    return null;
+  }
+
+  const buffer = await loadAttachmentBuffer(attachment);
+  if (!buffer) {
+    return null;
+  }
+
+  return extractDocxStructure(buffer, attachment.fileName);
 }
 
 export async function buildDocumentReadiness(

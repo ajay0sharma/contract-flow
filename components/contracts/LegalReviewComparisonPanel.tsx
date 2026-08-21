@@ -4,10 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatContractDateTime } from "@/lib/format-dates";
 import { findComparableAttachmentPairs } from "@/lib/legal-review-utils";
+import { LegalReviewCompareViewer } from "@/components/contracts/LegalReviewCompareViewer";
 import type { ContractAttachment } from "@/types/contract";
 import type {
   LegalReviewComment,
-  LegalReviewDeviation,
   LegalReviewRound,
 } from "@/types/legal-review";
 
@@ -15,16 +15,6 @@ interface LegalReviewComparisonPanelProps {
   contractId: string;
   attachments: ContractAttachment[];
 }
-
-const PRIORITY_STYLES: Record<
-  LegalReviewDeviation["priority"],
-  string
-> = {
-  critical: "bg-rose-100 text-rose-800",
-  high: "bg-orange-100 text-orange-800",
-  medium: "bg-amber-100 text-amber-800",
-  low: "bg-slate-100 text-slate-700",
-};
 
 function isRedlineDownloadReady(round: LegalReviewRound): boolean {
   if (!round.comparedAt || !round.redlineDocument) {
@@ -175,87 +165,6 @@ function DeviationComments({
   );
 }
 
-function DeviationCard({
-  contractId,
-  round,
-  deviation,
-  comments,
-  onUpdated,
-}: {
-  contractId: string;
-  round: LegalReviewRound;
-  deviation: LegalReviewDeviation;
-  comments: LegalReviewComment[];
-  onUpdated: () => void;
-}) {
-  return (
-    <article className="rounded-lg border border-border bg-surface p-4 shadow-sm">
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRIORITY_STYLES[deviation.priority]}`}
-          >
-            {deviation.priority}
-          </span>
-          {deviation.kind === "clause_deviation" ? (
-            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
-              Clause deviation
-            </span>
-          ) : null}
-        </div>
-        <h3 className="text-sm font-semibold text-foreground">{deviation.title}</h3>
-        <p className="text-sm text-text-secondary">{deviation.summary}</p>
-        {deviation.clauseTitle ? (
-          <p className="text-xs text-text-muted">
-            Approved clause: {deviation.clauseTitle}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="mt-4 space-y-4">
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-md border border-border bg-surface-muted p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Prior version
-            </p>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
-              {deviation.baselineExcerpt ?? "No baseline excerpt available."}
-            </p>
-          </div>
-          <div className="rounded-md border border-border bg-surface-muted p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-              Counterparty redline
-            </p>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">
-              {deviation.counterpartyExcerpt ??
-                "No counterparty excerpt available."}
-            </p>
-          </div>
-        </div>
-
-        {deviation.approvedClauseText ? (
-          <div className="rounded-md border border-violet-200 bg-violet-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
-              Approved clause text
-            </p>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-violet-900">
-              {deviation.approvedClauseText}
-            </p>
-          </div>
-        ) : null}
-
-        <DeviationComments
-          contractId={contractId}
-          roundId={round.id}
-          deviationId={deviation.id}
-          comments={comments}
-          onCommentAdded={onUpdated}
-        />
-      </div>
-    </article>
-  );
-}
-
 export function LegalReviewComparisonPanel({
   contractId,
   attachments,
@@ -267,7 +176,55 @@ export function LegalReviewComparisonPanel({
   const [baselineAttachmentId, setBaselineAttachmentId] = useState("");
   const [counterpartyAttachmentId, setCounterpartyAttachmentId] = useState("");
   const [starting, setStarting] = useState(false);
-  const [downloadingRedline, setDownloadingRedline] = useState(false);
+  const [downloadingExport, setDownloadingExport] = useState<string | null>(null);
+
+  async function downloadFromApi(path: string, fallbackFileName: string): Promise<void> {
+    setDownloadingExport(path);
+    setError(null);
+
+    try {
+      const response = await fetch(path);
+      const payload = (await response.json().catch(() => null)) as
+        | { url?: string; fileName?: string; error?: string }
+        | null;
+
+      if (!response.ok || !payload?.url) {
+        throw new Error(payload?.error ?? "Unable to download export.");
+      }
+
+      const fileName = payload.fileName ?? fallbackFileName;
+      let downloadUrl = payload.url;
+
+      if (!payload.url.startsWith("data:")) {
+        const fileResponse = await fetch(payload.url);
+
+        if (!fileResponse.ok) {
+          throw new Error("Unable to download export.");
+        }
+
+        downloadUrl = URL.createObjectURL(await fileResponse.blob());
+      }
+
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+
+      if (!payload.url.startsWith("data:")) {
+        URL.revokeObjectURL(downloadUrl);
+      }
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Unable to download export.",
+      );
+    } finally {
+      setDownloadingExport(null);
+    }
+  }
 
   const comparableAttachments = useMemo(
     () =>
@@ -405,54 +362,25 @@ export function LegalReviewComparisonPanel({
     }
   }
 
-  async function downloadRedline(roundId: string): Promise<void> {
-    setDownloadingRedline(true);
-    setError(null);
+  async function downloadRedline(
+    roundId: string,
+    format: "docx" | "pdf" | "html" = "docx",
+  ): Promise<void> {
+    const query = format === "docx" ? "" : `?format=${format}`;
+    await downloadFromApi(
+      `/api/contracts/${contractId}/legal-review/${roundId}/redline/download${query}`,
+      `legal-review-redline.${format === "docx" ? "docx" : format}`,
+    );
+  }
 
-    try {
-      const response = await fetch(
-        `/api/contracts/${contractId}/legal-review/${roundId}/redline/download`,
-      );
-      const payload = (await response.json().catch(() => null)) as
-        | { url?: string; fileName?: string; error?: string }
-        | null;
-
-      if (!response.ok || !payload?.url) {
-        throw new Error(payload?.error ?? "Unable to download redline document.");
-      }
-
-      const fileName = payload.fileName ?? "legal-review-redline.docx";
-      let downloadUrl = payload.url;
-
-      if (!payload.url.startsWith("data:")) {
-        const fileResponse = await fetch(payload.url);
-
-        if (!fileResponse.ok) {
-          throw new Error("Unable to download redline document.");
-        }
-
-        downloadUrl = URL.createObjectURL(await fileResponse.blob());
-      }
-
-      const anchor = document.createElement("a");
-      anchor.href = downloadUrl;
-      anchor.download = fileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-
-      if (!payload.url.startsWith("data:")) {
-        URL.revokeObjectURL(downloadUrl);
-      }
-    } catch (downloadError) {
-      setError(
-        downloadError instanceof Error
-          ? downloadError.message
-          : "Unable to download redline document.",
-      );
-    } finally {
-      setDownloadingRedline(false);
-    }
+  async function downloadExport(
+    roundId: string,
+    format: "csv" | "clean-docx",
+  ): Promise<void> {
+    await downloadFromApi(
+      `/api/contracts/${contractId}/legal-review/${roundId}/exports/${format}`,
+      `legal-review-export.${format === "csv" ? "csv" : "docx"}`,
+    );
   }
 
   async function completeRound(roundId: string): Promise<void> {
@@ -484,8 +412,9 @@ export function LegalReviewComparisonPanel({
             Legal review comparison
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Compare the prior agreement version with a counterparty redline, prioritize
-            deviations, and track legal review rounds with threaded comments.
+            Compare the prior agreement version with a counterparty redline using
+            Litera-style original, modified, and combined redline panes with numbered
+            change navigation.
           </p>
         </div>
         <Link
@@ -559,14 +488,54 @@ export function LegalReviewComparisonPanel({
               Re-run comparison
             </button>
             {isRedlineDownloadReady(selectedRound) ? (
-              <button
-                type="button"
-                disabled={downloadingRedline}
-                onClick={() => void downloadRedline(selectedRound.id)}
-                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-              >
-                {downloadingRedline ? "Preparing redline..." : "Download redline"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={Boolean(downloadingExport)}
+                  onClick={() => void downloadRedline(selectedRound.id, "docx")}
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+                >
+                  {downloadingExport?.includes("redline/download")
+                    ? "Preparing..."
+                    : "Redline DOCX"}
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(downloadingExport)}
+                  onClick={() => void downloadRedline(selectedRound.id, "pdf")}
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+                >
+                  Redline PDF
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(downloadingExport)}
+                  onClick={() => void downloadRedline(selectedRound.id, "html")}
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+                >
+                  Redline HTML
+                </button>
+              </>
+            ) : null}
+            {selectedRound.comparedAt ? (
+              <>
+                <button
+                  type="button"
+                  disabled={Boolean(downloadingExport)}
+                  onClick={() => void downloadExport(selectedRound.id, "clean-docx")}
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+                >
+                  Clean draft DOCX
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(downloadingExport)}
+                  onClick={() => void downloadExport(selectedRound.id, "csv")}
+                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+                >
+                  Change log CSV
+                </button>
+              </>
             ) : null}
             {selectedRound.status === "open" ? (
               <button
@@ -644,16 +613,20 @@ export function LegalReviewComparisonPanel({
                 : "Comparison has not been run yet for this round."}
             </p>
           ) : (
-            selectedRound.deviations.map((deviation) => (
-              <DeviationCard
-                key={deviation.id}
-                contractId={contractId}
-                round={selectedRound}
-                deviation={deviation}
-                comments={selectedRound.comments}
-                onUpdated={() => void loadRounds()}
-              />
-            ))
+            <LegalReviewCompareViewer
+              contractId={contractId}
+              round={selectedRound}
+              onRoundUpdated={() => void loadRounds()}
+              renderComments={(deviation) => (
+                <DeviationComments
+                  contractId={contractId}
+                  roundId={selectedRound.id}
+                  deviationId={deviation.id}
+                  comments={selectedRound.comments}
+                  onCommentAdded={() => void loadRounds()}
+                />
+              )}
+            />
           )}
         </div>
       ) : null}

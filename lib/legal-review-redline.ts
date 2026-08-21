@@ -56,12 +56,30 @@ function buildRevisionParagraph(
   return `<w:p>${chunks.join("")}</w:p>`;
 }
 
-function buildDeletedParagraph(text: string, author: string, timestamp: string): string {
-  return `<w:p><w:del w:author="${escapeXml(author)}" w:date="${timestamp}"><w:r><w:delText xml:space="preserve">${escapeXml(text)}</w:delText></w:r></w:del></w:p>`;
+function buildDeletedParagraph(
+  text: string,
+  author: string,
+  timestamp: string,
+  note?: string,
+): string {
+  const prefix = note
+    ? `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${escapeXml(note)} </w:t></w:r>`
+    : "";
+
+  return `<w:p>${prefix}<w:del w:author="${escapeXml(author)}" w:date="${timestamp}"><w:r><w:delText xml:space="preserve">${escapeXml(text)}</w:delText></w:r></w:del></w:p>`;
 }
 
-function buildInsertedParagraph(text: string, author: string, timestamp: string): string {
-  return `<w:p><w:ins w:author="${escapeXml(author)}" w:date="${timestamp}"><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:ins></w:p>`;
+function buildInsertedParagraph(
+  text: string,
+  author: string,
+  timestamp: string,
+  note?: string,
+): string {
+  const prefix = note
+    ? `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">${escapeXml(note)} </w:t></w:r>`
+    : "";
+
+  return `<w:p>${prefix}<w:ins w:author="${escapeXml(author)}" w:date="${timestamp}"><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:ins></w:p>`;
 }
 
 function buildNormalParagraph(text: string): string {
@@ -81,14 +99,39 @@ function buildBlockParagraph(
     case "unchanged":
       return buildNormalParagraph(block.text);
     case "removed":
-      return buildDeletedParagraph(block.text, author, timestamp);
+      return buildDeletedParagraph(
+        block.text,
+        author,
+        timestamp,
+        block.movedTo ? "[Relocated section removed from prior position]" : undefined,
+      );
     case "added":
-      return buildInsertedParagraph(block.text, author, timestamp);
+      return buildInsertedParagraph(
+        block.text,
+        author,
+        timestamp,
+        block.movedFrom ? "[Relocated section inserted at new position]" : undefined,
+      );
     case "modified":
       return buildRevisionParagraph(
         diffWords(block.baselineText, block.counterpartyText),
         author,
         timestamp,
+      );
+    case "moved":
+      return (
+        buildDeletedParagraph(
+          block.baselineText,
+          author,
+          timestamp,
+          "[Relocated section removed from prior position]",
+        ) +
+        buildInsertedParagraph(
+          block.counterpartyText,
+          author,
+          timestamp,
+          "[Relocated section inserted at new position]",
+        )
       );
     default:
       return "";
@@ -116,7 +159,7 @@ export async function generateRedlineDocx(
     buildNormalParagraph(`Generated: ${new Date().toLocaleString()}`),
     buildNormalParagraph(input.comparisonSummary),
     buildNormalParagraph(
-      "Deletions appear as struck-through text. Insertions appear as underlined additions. Modified paragraphs show inline word-level redlines.",
+      "Litera-style redline legend: deletions appear as struck-through text, insertions as underlined additions, modified paragraphs show inline word-level changes, and relocated sections are marked at both the prior and new positions.",
     ),
     buildHeadingParagraph("Redlined agreement text"),
     ...alignment.map((block) => buildBlockParagraph(block, author, timestamp)),
