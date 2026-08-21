@@ -43,7 +43,7 @@ export default async function LegalReviewPage({ params }: LegalReviewPageProps) 
   }
 
   return (
-    <PageShell title="Legal Review Comparison">
+    <PageShell title="Compare versions">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-text-muted">
@@ -61,6 +61,7 @@ export default async function LegalReviewPage({ params }: LegalReviewPageProps) 
         <LegalReviewComparisonPanel
           contractId={contract.id}
           attachments={contract.attachments}
+          showPageLink={false}
         />
       </div>
 

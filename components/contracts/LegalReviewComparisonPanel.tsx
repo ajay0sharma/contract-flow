@@ -4,16 +4,17 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatContractDateTime } from "@/lib/format-dates";
 import { findComparableAttachmentPairs } from "@/lib/legal-review-utils";
-import { LegalReviewCompareViewer } from "@/components/contracts/LegalReviewCompareViewer";
+import { VersionCompareViewer } from "@/components/contracts/VersionCompareViewer";
 import type { ContractAttachment } from "@/types/contract";
 import type {
-  LegalReviewComment,
   LegalReviewRound,
+  LegalReviewRoundStatus,
 } from "@/types/legal-review";
 
 interface LegalReviewComparisonPanelProps {
   contractId: string;
   attachments: ContractAttachment[];
+  showPageLink?: boolean;
 }
 
 function isRedlineDownloadReady(round: LegalReviewRound): boolean {
@@ -26,148 +27,23 @@ function isRedlineDownloadReady(round: LegalReviewRound): boolean {
   );
 }
 
-function DeviationComments({
-  contractId,
-  roundId,
-  deviationId,
-  comments,
-  onCommentAdded,
-}: {
-  contractId: string;
-  roundId: string;
-  deviationId: string;
-  comments: LegalReviewComment[];
-  onCommentAdded: () => void;
-}) {
-  const [body, setBody] = useState("");
-  const [replyTo, setReplyTo] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const threadedComments = useMemo(() => {
-    const roots = comments.filter(
-      (comment) => comment.deviationId === deviationId && !comment.parentCommentId,
-    );
-
-    return roots.map((root) => ({
-      root,
-      replies: comments.filter((comment) => comment.parentCommentId === root.id),
-    }));
-  }, [comments, deviationId]);
-
-  async function handleSubmit(event: React.FormEvent): Promise<void> {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      const response = await fetch(
-        `/api/contracts/${contractId}/legal-review/${roundId}/comments`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            body,
-            deviationId,
-            parentCommentId: replyTo,
-          }),
-        },
-      );
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string }
-        | null;
-
-      if (!response.ok) {
-        throw new Error(payload?.error ?? "Unable to post comment.");
-      }
-
-      setBody("");
-      setReplyTo(null);
-      onCommentAdded();
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "Unable to post comment.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
+function formatRoundStatus(status: LegalReviewRoundStatus): string {
+  switch (status) {
+    case "open":
+      return "In progress";
+    case "completed":
+      return "Reviewed";
+    case "superseded":
+      return "Archived";
+    default:
+      return status;
   }
-
-  return (
-    <div className="mt-4 space-y-3 border-t border-border pt-4">
-      {threadedComments.length === 0 ? (
-        <p className="text-sm text-text-muted">No comments yet.</p>
-      ) : (
-        threadedComments.map(({ root, replies }) => (
-          <div key={root.id} className="space-y-2">
-            <div className="rounded-md bg-surface-muted px-3 py-2 text-sm">
-              <p className="font-medium text-foreground">{root.authorName}</p>
-              <p className="mt-1 text-text-secondary">{root.body}</p>
-              <div className="mt-2 flex items-center gap-3 text-xs text-text-muted">
-                <span>{formatContractDateTime(root.createdAt)}</span>
-                <button
-                  type="button"
-                  className="font-medium text-accent hover:underline"
-                  onClick={() => setReplyTo(root.id)}
-                >
-                  Reply
-                </button>
-              </div>
-            </div>
-            {replies.map((reply) => (
-              <div
-                key={reply.id}
-                className="ml-4 rounded-md border border-border bg-surface px-3 py-2 text-sm"
-              >
-                <p className="font-medium text-foreground">{reply.authorName}</p>
-                <p className="mt-1 text-text-secondary">{reply.body}</p>
-                <p className="mt-2 text-xs text-text-muted">
-                  {formatContractDateTime(reply.createdAt)}
-                </p>
-              </div>
-            ))}
-          </div>
-        ))
-      )}
-
-      <form onSubmit={(event) => void handleSubmit(event)} className="space-y-2">
-        {replyTo ? (
-          <p className="text-xs text-text-muted">
-            Replying to thread.{" "}
-            <button
-              type="button"
-              className="font-medium text-accent hover:underline"
-              onClick={() => setReplyTo(null)}
-            >
-              Cancel reply
-            </button>
-          </p>
-        ) : null}
-        <textarea
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          rows={3}
-          placeholder="Add a legal review comment..."
-          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground"
-        />
-        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={submitting || !body.trim()}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {submitting ? "Posting..." : "Post comment"}
-        </button>
-      </form>
-    </div>
-  );
 }
 
 export function LegalReviewComparisonPanel({
   contractId,
   attachments,
+  showPageLink = true,
 }: LegalReviewComparisonPanelProps) {
   const [rounds, setRounds] = useState<LegalReviewRound[]>([]);
   const [loading, setLoading] = useState(true);
@@ -189,7 +65,7 @@ export function LegalReviewComparisonPanel({
         | null;
 
       if (!response.ok || !payload?.url) {
-        throw new Error(payload?.error ?? "Unable to download export.");
+        throw new Error(payload?.error ?? "Unable to download redline.");
       }
 
       const fileName = payload.fileName ?? fallbackFileName;
@@ -199,7 +75,7 @@ export function LegalReviewComparisonPanel({
         const fileResponse = await fetch(payload.url);
 
         if (!fileResponse.ok) {
-          throw new Error("Unable to download export.");
+          throw new Error("Unable to download redline.");
         }
 
         downloadUrl = URL.createObjectURL(await fileResponse.blob());
@@ -219,7 +95,7 @@ export function LegalReviewComparisonPanel({
       setError(
         downloadError instanceof Error
           ? downloadError.message
-          : "Unable to download export.",
+          : "Unable to download redline.",
       );
     } finally {
       setDownloadingExport(null);
@@ -253,7 +129,7 @@ export function LegalReviewComparisonPanel({
         | null;
 
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Unable to load legal review rounds.");
+        throw new Error(payload?.error ?? "Unable to load comparisons.");
       }
 
       const nextRounds = payload?.rounds ?? [];
@@ -263,7 +139,7 @@ export function LegalReviewComparisonPanel({
       setError(
         loadError instanceof Error
           ? loadError.message
-          : "Unable to load legal review rounds.",
+          : "Unable to load comparisons.",
       );
     } finally {
       setLoading(false);
@@ -306,7 +182,7 @@ export function LegalReviewComparisonPanel({
         | null;
 
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Unable to start legal review round.");
+        throw new Error(payload?.error ?? "Unable to compare versions.");
       }
 
       if (payload?.round) {
@@ -322,7 +198,7 @@ export function LegalReviewComparisonPanel({
       setError(
         startError instanceof Error
           ? startError.message
-          : "Unable to start legal review round.",
+          : "Unable to compare versions.",
       );
     } finally {
       setStarting(false);
@@ -362,24 +238,10 @@ export function LegalReviewComparisonPanel({
     }
   }
 
-  async function downloadRedline(
-    roundId: string,
-    format: "docx" | "pdf" | "html" = "docx",
-  ): Promise<void> {
-    const query = format === "docx" ? "" : `?format=${format}`;
+  async function downloadRedline(roundId: string): Promise<void> {
     await downloadFromApi(
-      `/api/contracts/${contractId}/legal-review/${roundId}/redline/download${query}`,
-      `legal-review-redline.${format === "docx" ? "docx" : format}`,
-    );
-  }
-
-  async function downloadExport(
-    roundId: string,
-    format: "csv" | "clean-docx",
-  ): Promise<void> {
-    await downloadFromApi(
-      `/api/contracts/${contractId}/legal-review/${roundId}/exports/${format}`,
-      `legal-review-export.${format === "csv" ? "csv" : "docx"}`,
+      `/api/contracts/${contractId}/legal-review/${roundId}/redline/download`,
+      "version-compare-redline.docx",
     );
   }
 
@@ -397,7 +259,7 @@ export function LegalReviewComparisonPanel({
       | null;
 
     if (!response.ok) {
-      setError(payload?.error ?? "Unable to complete legal review round.");
+      setError(payload?.error ?? "Unable to mark comparison as reviewed.");
       return;
     }
 
@@ -409,24 +271,26 @@ export function LegalReviewComparisonPanel({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-foreground">
-            Legal review comparison
+            Compare versions
           </h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Compare the prior agreement version with a counterparty redline using
-            Litera-style original, modified, and combined redline panes with numbered
-            change navigation.
+            See what changed between your last version and a counterparty&apos;s
+            edits. Download a redline to share with your advisor, then mark the
+            comparison as reviewed.
           </p>
         </div>
-        <Link
-          href={`/contracts/${contractId}/legal-review`}
-          className="text-sm font-medium text-accent hover:underline"
-        >
-          Open full review workspace
-        </Link>
+        {showPageLink ? (
+          <Link
+            href={`/contracts/${contractId}/legal-review`}
+            className="text-sm font-medium text-accent hover:underline"
+          >
+            Open compare page
+          </Link>
+        ) : null}
       </div>
 
       {loading ? (
-        <p className="mt-6 text-sm text-text-muted">Loading review rounds...</p>
+        <p className="mt-6 text-sm text-text-muted">Loading comparisons...</p>
       ) : null}
 
       {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
@@ -475,7 +339,7 @@ export function LegalReviewComparisonPanel({
           onClick={() => void startRound()}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {starting ? "Starting..." : "Start review round"}
+          {starting ? "Comparing..." : "Compare versions"}
         </button>
         {selectedRound ? (
           <>
@@ -485,57 +349,19 @@ export function LegalReviewComparisonPanel({
               onClick={() => void rerunComparison(selectedRound.id)}
               className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
             >
-              Re-run comparison
+              Refresh comparison
             </button>
             {isRedlineDownloadReady(selectedRound) ? (
-              <>
-                <button
-                  type="button"
-                  disabled={Boolean(downloadingExport)}
-                  onClick={() => void downloadRedline(selectedRound.id, "docx")}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-                >
-                  {downloadingExport?.includes("redline/download")
-                    ? "Preparing..."
-                    : "Redline DOCX"}
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(downloadingExport)}
-                  onClick={() => void downloadRedline(selectedRound.id, "pdf")}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-                >
-                  Redline PDF
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(downloadingExport)}
-                  onClick={() => void downloadRedline(selectedRound.id, "html")}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-                >
-                  Redline HTML
-                </button>
-              </>
-            ) : null}
-            {selectedRound.comparedAt ? (
-              <>
-                <button
-                  type="button"
-                  disabled={Boolean(downloadingExport)}
-                  onClick={() => void downloadExport(selectedRound.id, "clean-docx")}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-                >
-                  Clean draft DOCX
-                </button>
-                <button
-                  type="button"
-                  disabled={Boolean(downloadingExport)}
-                  onClick={() => void downloadExport(selectedRound.id, "csv")}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
-                >
-                  Change log CSV
-                </button>
-              </>
+              <button
+                type="button"
+                disabled={Boolean(downloadingExport)}
+                onClick={() => void downloadRedline(selectedRound.id)}
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+              >
+                {downloadingExport?.includes("redline/download")
+                  ? "Preparing..."
+                  : "Download redline"}
+              </button>
             ) : null}
             {selectedRound.status === "open" ? (
               <button
@@ -543,7 +369,7 @@ export function LegalReviewComparisonPanel({
                 onClick={() => void completeRound(selectedRound.id)}
                 className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
               >
-                Complete round
+                Mark as reviewed
               </button>
             ) : null}
           </>
@@ -563,7 +389,7 @@ export function LegalReviewComparisonPanel({
                   : "bg-surface-muted text-text-secondary"
               }`}
             >
-              Round {round.roundNumber} · {round.status}
+              Comparison {round.roundNumber} · {formatRoundStatus(round.status)}
             </button>
           ))}
         </div>
@@ -573,9 +399,14 @@ export function LegalReviewComparisonPanel({
         <div className="mt-6 space-y-4">
           <div className="rounded-md border border-border bg-surface-muted p-4 text-sm">
             <p className="font-medium text-foreground">
-              Round {selectedRound.roundNumber}: {selectedRound.baselineFileName} →{" "}
-              {selectedRound.counterpartyFileName}
+              Comparison {selectedRound.roundNumber}: {selectedRound.baselineFileName}{" "}
+              → {selectedRound.counterpartyFileName}
             </p>
+            {selectedRound.comparedAt ? (
+              <p className="mt-1 text-xs text-text-muted">
+                Compared {formatContractDateTime(selectedRound.comparedAt)}
+              </p>
+            ) : null}
             <p className="mt-1 text-text-secondary">
               {selectedRound.comparisonSummary ??
                 "Comparison has not been run yet. PDF and Word files must contain extractable text."}
@@ -609,24 +440,11 @@ export function LegalReviewComparisonPanel({
           {selectedRound.deviations.length === 0 ? (
             <p className="text-sm text-text-muted">
               {selectedRound.comparedAt
-                ? "No material deviations were detected for this round."
-                : "Comparison has not been run yet for this round."}
+                ? "No material changes were detected between these versions."
+                : "Comparison has not been run yet for this comparison."}
             </p>
           ) : (
-            <LegalReviewCompareViewer
-              contractId={contractId}
-              round={selectedRound}
-              onRoundUpdated={() => void loadRounds()}
-              renderComments={(deviation) => (
-                <DeviationComments
-                  contractId={contractId}
-                  roundId={selectedRound.id}
-                  deviationId={deviation.id}
-                  comments={selectedRound.comments}
-                  onCommentAdded={() => void loadRounds()}
-                />
-              )}
-            />
+            <VersionCompareViewer key={selectedRound.id} round={selectedRound} />
           )}
         </div>
       ) : null}

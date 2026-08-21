@@ -159,7 +159,7 @@ export async function generateRedlineDocx(
     buildNormalParagraph(`Generated: ${new Date().toLocaleString()}`),
     buildNormalParagraph(input.comparisonSummary),
     buildNormalParagraph(
-      "Litera-style redline legend: deletions appear as struck-through text, insertions as underlined additions, modified paragraphs show inline word-level changes, and relocated sections are marked at both the prior and new positions.",
+      "Redline legend: deletions appear as struck-through text, insertions as underlined additions, modified paragraphs show inline word-level changes, and relocated sections are marked at both the prior and new positions.",
     ),
     buildHeadingParagraph("Redlined agreement text"),
     ...alignment.map((block) => buildBlockParagraph(block, author, timestamp)),
