@@ -341,6 +341,9 @@ export async function compareLegalReviewRound(
       counterpartyText: counterpartyExtraction.text,
       comparisonSummary,
       generatedByName: actor.name,
+      baselineStructure,
+      counterpartyStructure,
+      documentAlignment,
     });
   } catch (error) {
     captureException(error, {

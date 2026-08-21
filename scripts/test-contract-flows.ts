@@ -1512,6 +1512,15 @@ async function runLegalReviewFixtureUnitTests(): Promise<void> {
     JSON.stringify(alignment.map((block) => block.kind)),
   );
 
+  const baselineStructure = await extractDocxStructure(
+    baselineBuffer,
+    "northwind-baseline-v1.docx",
+  );
+  const counterpartyStructure = await extractDocxStructure(
+    counterpartyBuffer,
+    "northwind-counterparty-v2.docx",
+  );
+
   const buffer = await generateRedlineDocx({
     roundNumber: 1,
     baselineFileName: "northwind-baseline-v1.docx",
@@ -1520,6 +1529,8 @@ async function runLegalReviewFixtureUnitTests(): Promise<void> {
     counterpartyText,
     comparisonSummary: comparison.summary,
     generatedByName: "Legal Review",
+    baselineStructure,
+    counterpartyStructure,
   });
 
   const zip = await JSZip.loadAsync(buffer);
@@ -1869,6 +1880,129 @@ async function runLegalReviewRedlineUnitTests(): Promise<void> {
     "Redline docx generates a zip document",
     buffer.length > 500 && buffer[0] === 0x50 && buffer[1] === 0x4b,
     String(buffer.length),
+  );
+
+  const formattedBuffer = await generateRedlineDocx({
+    roundNumber: 2,
+    baselineFileName: "baseline.docx",
+    counterpartyFileName: "counterparty.docx",
+    baselineText: "The fee cap is 100000 dollars.",
+    counterpartyText: "The fee cap is 150000 dollars.",
+    comparisonSummary: "1 deviation detected.",
+    generatedByName: "Legal Review",
+    baselineStructure: {
+      blocks: [
+        {
+          kind: "paragraph",
+          text: "The fee cap is 100000 dollars.",
+          runs: [
+            {
+              text: "The fee cap is 100000 dollars.",
+              formatting: {
+                bold: true,
+                italic: false,
+                underline: false,
+                strike: false,
+                allCaps: false,
+                highlight: null,
+              },
+            },
+          ],
+          formattingSignature: "b:the fee cap is 100000 dollars.",
+        },
+      ],
+      footnotes: [],
+    },
+    counterpartyStructure: {
+      blocks: [
+        {
+          kind: "paragraph",
+          text: "The fee cap is 150000 dollars.",
+          runs: [
+            {
+              text: "The fee cap is 150000 dollars.",
+              formatting: {
+                bold: false,
+                italic: false,
+                underline: false,
+                strike: false,
+                allCaps: false,
+                highlight: null,
+              },
+            },
+          ],
+          formattingSignature: ":the fee cap is 150000 dollars.",
+        },
+      ],
+      footnotes: [],
+    },
+  });
+
+  const formattedZip = await JSZip.loadAsync(formattedBuffer);
+  const formattedDocumentXml = await formattedZip
+    .file("word/document.xml")!
+    .async("string");
+
+  assert(
+    "Formatted redline preserves bold styling on deleted baseline text",
+    formattedDocumentXml.includes("<w:b/>") &&
+      formattedDocumentXml.includes("<w:del") &&
+      formattedDocumentXml.includes("<w:ins"),
+    formattedDocumentXml,
+  );
+
+  const structuredBaseline = readFileSync(
+    resolve("scripts/fixtures/legal-review/structured-baseline-v1.docx"),
+  );
+  const structuredCounterparty = readFileSync(
+    resolve("scripts/fixtures/legal-review/structured-counterparty-v2.docx"),
+  );
+  const structuredBaselineText = (
+    await extractTextFromDocument(structuredBaseline, "structured-baseline-v1.docx")
+  ).trim();
+  const structuredCounterpartyText = (
+    await extractTextFromDocument(
+      structuredCounterparty,
+      "structured-counterparty-v2.docx",
+    )
+  ).trim();
+  const structuredBaselineStructure = await extractDocxStructure(
+    structuredBaseline,
+    "structured-baseline-v1.docx",
+  );
+  const structuredCounterpartyStructure = await extractDocxStructure(
+    structuredCounterparty,
+    "structured-counterparty-v2.docx",
+  );
+  const structuredRedline = await generateRedlineDocx({
+    roundNumber: 3,
+    baselineFileName: "structured-baseline-v1.docx",
+    counterpartyFileName: "structured-counterparty-v2.docx",
+    baselineText: structuredBaselineText,
+    counterpartyText: structuredCounterpartyText,
+    comparisonSummary: "Structured fixture comparison.",
+    generatedByName: "Legal Review",
+    baselineStructure: structuredBaselineStructure,
+    counterpartyStructure: structuredCounterpartyStructure,
+  });
+  const structuredDocumentXml = await (
+    await JSZip.loadAsync(structuredRedline)
+  )
+    .file("word/document.xml")!
+    .async("string");
+
+  assert(
+    "Structured DOCX fixtures preserve source formatting in downloaded redline",
+    structuredDocumentXml.includes("Original Word formatting is preserved") &&
+      structuredDocumentXml.includes("<w:ins"),
+    structuredDocumentXml.slice(0, 800),
+  );
+
+  assert(
+    "Structured DOCX redline marks formatting-only changes with bold deletions",
+    structuredDocumentXml.includes("<w:b/>") &&
+      structuredDocumentXml.includes("<w:del"),
+    structuredDocumentXml,
   );
 }
 

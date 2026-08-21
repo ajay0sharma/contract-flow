@@ -3,6 +3,10 @@ import {
   buildDocumentAlignment,
   type RedlineAlignmentBlock,
 } from "@/lib/legal-review-comparison";
+import type { StructuredDocument } from "@/lib/legal-review-docx-structure";
+import {
+  buildFormattedBlockParagraph,
+} from "@/lib/legal-review-redline-formatting";
 import { diffWords, type WordDiffPart } from "@/lib/legal-review-text-diff";
 
 export interface GenerateRedlineDocxInput {
@@ -13,6 +17,9 @@ export interface GenerateRedlineDocxInput {
   counterpartyText: string;
   comparisonSummary: string;
   generatedByName: string;
+  baselineStructure?: StructuredDocument | null;
+  counterpartyStructure?: StructuredDocument | null;
+  documentAlignment?: RedlineAlignmentBlock[];
 }
 
 function escapeXml(value: string): string {
@@ -94,7 +101,22 @@ function buildBlockParagraph(
   block: RedlineAlignmentBlock,
   author: string,
   timestamp: string,
+  baselineStructure?: StructuredDocument | null,
+  counterpartyStructure?: StructuredDocument | null,
 ): string {
+  const formatted = buildFormattedBlockParagraph(
+    block,
+    baselineStructure,
+    counterpartyStructure,
+    author,
+    timestamp,
+    escapeXml,
+  );
+
+  if (formatted) {
+    return formatted;
+  }
+
   switch (block.kind) {
     case "unchanged":
       return buildNormalParagraph(block.text);
@@ -147,10 +169,14 @@ export async function generateRedlineDocx(
 ): Promise<Buffer> {
   const author = input.generatedByName || "Legal Review";
   const timestamp = revisionTimestamp();
-  const alignment = buildDocumentAlignment({
-    baselineText: input.baselineText,
-    counterpartyText: input.counterpartyText,
-  });
+  const alignment =
+    input.documentAlignment ??
+    buildDocumentAlignment({
+      baselineText: input.baselineText,
+      counterpartyText: input.counterpartyText,
+    });
+  const usesFormattedDocx =
+    Boolean(input.baselineStructure) && Boolean(input.counterpartyStructure);
 
   const paragraphs = [
     buildHeadingParagraph(`Legal Review Redline — Round ${input.roundNumber}`),
@@ -159,10 +185,20 @@ export async function generateRedlineDocx(
     buildNormalParagraph(`Generated: ${new Date().toLocaleString()}`),
     buildNormalParagraph(input.comparisonSummary),
     buildNormalParagraph(
-      "Redline legend: deletions appear as struck-through text, insertions as underlined additions, modified paragraphs show inline word-level changes, and relocated sections are marked at both the prior and new positions.",
+      usesFormattedDocx
+        ? "Redline legend: deletions appear as struck-through text, insertions as underlined additions, modified paragraphs show inline word-level changes, and relocated sections are marked at both the prior and new positions. Original Word formatting is preserved where the source documents could be matched."
+        : "Redline legend: deletions appear as struck-through text, insertions as underlined additions, modified paragraphs show inline word-level changes, and relocated sections are marked at both the prior and new positions.",
     ),
     buildHeadingParagraph("Redlined agreement text"),
-    ...alignment.map((block) => buildBlockParagraph(block, author, timestamp)),
+    ...alignment.map((block) =>
+      buildBlockParagraph(
+        block,
+        author,
+        timestamp,
+        input.baselineStructure,
+        input.counterpartyStructure,
+      ),
+    ),
   ];
 
   const zip = new JSZip();

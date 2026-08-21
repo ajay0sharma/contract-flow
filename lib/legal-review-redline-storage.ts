@@ -8,6 +8,7 @@ import {
   buildRedlineFileName,
   generateRedlineDocx,
 } from "@/lib/legal-review-redline";
+import type { StructuredDocument } from "@/lib/legal-review-docx-structure";
 import type { LegalReviewRedlineDocument, LegalReviewRound } from "@/types/legal-review";
 
 export async function persistLegalReviewRedlineDocument(options: {
@@ -21,6 +22,9 @@ export async function persistLegalReviewRedlineDocument(options: {
   counterpartyText: string;
   comparisonSummary: string;
   generatedByName: string;
+  baselineStructure?: StructuredDocument | null;
+  counterpartyStructure?: StructuredDocument | null;
+  documentAlignment?: LegalReviewRound["documentAlignment"];
 }): Promise<LegalReviewRedlineDocument> {
   const buffer = await generateRedlineDocx({
     roundNumber: options.roundNumber,
@@ -30,6 +34,9 @@ export async function persistLegalReviewRedlineDocument(options: {
     counterpartyText: options.counterpartyText,
     comparisonSummary: options.comparisonSummary,
     generatedByName: options.generatedByName,
+    baselineStructure: options.baselineStructure,
+    counterpartyStructure: options.counterpartyStructure,
+    documentAlignment: options.documentAlignment ?? undefined,
   });
   const fileName = buildRedlineFileName(options.roundNumber);
   const generatedAt = new Date().toISOString();
